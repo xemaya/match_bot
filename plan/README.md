@@ -62,6 +62,7 @@ P36：Jev targeted 策略与本地无 Telegram 对话验证，Codex 本地实现
 | P35 | 0.21.1真实多轮回归 | [P35-agent-regression-round-two.md](./P35-agent-regression-round-two.md) | P34 | 8 | codex | 完成 | 6条799779token；0.22.0引用计数修复；整体质量未通过 | 2026-10-18 |
 | P36 | Agent框架review与交付阶段 | [P36-agent-framework-review.md](./P36-agent-framework-review.md) | P35 | 8 | codex | 完成 | 0.23.0阶段交接/来源摘录/重复追问/时钟等价修复；1128测试；真实多轮未验收 | 2026-10-18 |
 | P39 | 新生成模型与Telegram回归 | [P39-model-provider-telegram-regression.md](./P39-model-provider-telegram-regression.md) | P38 | 8 | codex | 完成 | 0.26.1/gpt-6.1-sol low；264118token；6条均回复，任务质量未通过 | 2026-10-18 |
+| P41 | 研究停止与交付证据覆盖 | [P41-research-delivery.md](./P41-research-delivery.md) | P39 | 8 | codex | 待合并 | 1196 测试通过；真实任务尚未复测 | 2026-10-18 |
 
 ## 波次与并行
 

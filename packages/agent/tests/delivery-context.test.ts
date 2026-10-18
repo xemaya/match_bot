@@ -73,23 +73,49 @@ describe('delivery context boundaries', () => {
     c.task!.ownerUserId = 'other';
     expect(canHandOffToDelivery(c)).toBe(false);
   });
-  it('limits the writer to selected current sources instead of replaying every discovered page', () => {
+  it('preserves registration and eligibility pages even when only the clinic was preferred', () => {
     const c = context();
-    c.knowledgeSources = Array.from({ length: 10 }, (_, i) =>
+    c.knowledgeSources = Array.from({ length: 13 }, (_, i) =>
       createKnowledgeSource(
         {
           title: 'Page ' + i,
           url: 'https://www.nhs.uk/' + i,
-          text: ('Registration evidence ' + i + '\n').repeat(12),
+          text:
+            i === 12
+              ? 'You can register online without an NHS number.'
+              : 'Clinic location and opening hours for local patients.',
         },
         i + 1,
       ),
     );
-    c.deliverySourceRefs = ['k2', 'k6'];
-    const p = buildDeliveryPacket(c);
-    expect(p.refs).toEqual(['k2', 'k6']);
-    expect(p.knowledge).toHaveLength(2);
-    expect(JSON.stringify(p)).not.toContain('Page 9');
+    c.deliverySourceRefs = ['k2'];
+    const packet = buildDeliveryPacket(c);
+    expect(packet.refs[0]).toBe('k2');
+    expect(c.knowledgeSources[0]!.ref).toBe('k1');
+    expect(packet.refs).toContain('k13');
+    expect(JSON.stringify(packet.knowledge)).toContain('without an NHS number');
+    expect(packet.knowledge.length).toBeLessThanOrEqual(16);
+  });
+  it('retains later passages on a selected page instead of cutting the page to its first four facts', () => {
+    const c = context();
+    c.knowledgeSources = [
+      createKnowledgeSource(
+        {
+          title: 'Registration',
+          url: 'https://www.nhs.uk/register',
+          text: [
+            'Clinic introduction for local patients.',
+            'Clinic address and directions for patients.',
+            'Opening hours for routine appointments.',
+            'Contact information for local patients.',
+            'You can register online without proof of address.',
+          ].join('\n'),
+        },
+        1,
+      ),
+    ];
+    c.deliverySourceRefs = ['k1'];
+    expect(JSON.stringify(buildDeliveryPacket(c).knowledge)).toContain('without proof of address');
   });
   it('uses known confirmed subject evidence before weak alternative offers', () => {
     const c = context();

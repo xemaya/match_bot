@@ -1,3 +1,4 @@
+import { pendingResearchConditions, researchFollowupInstruction } from './research-readiness.js';
 import { buildDeliveryPacket } from './delivery-context.js';
 import { replyRequestStatusTool } from './tools/reply-request-status.js';
 import { canSkipSupplementReply } from './supplement-replies.js';
@@ -199,6 +200,44 @@ export async function runInbound(p: {
     )
       return finalizeRequest(p, session);
     return respondRequestStatus(p, session);
+  }
+  // A natural-language finish must not bypass the same gate as record_task_progress.
+  // One bounded continuation only; exhausted/failed research can still produce a partial answer.
+  if (
+    p.deps.answerRequests &&
+    p.deps.taskRequests &&
+    !result.interruptions.length &&
+    !p.ctx.answerRecorded &&
+    !p.ctx.outboundBlocked &&
+    !p.ctx.answerInputExhausted &&
+    p.ctx.task?.nextStep?.action !== 'ask_user' &&
+    pendingResearchConditions(p.ctx).length &&
+    (p.deps.marketSearch || p.deps.webSearch?.research)
+  ) {
+    const remaining = (p.ctx.runDeadlineAt ?? Date.now()) - Date.now() - DELIVERY_RESERVE_MS;
+    if (remaining > 0) {
+      await p.deps.repos.traces.create({
+        kind: 'gate',
+        inputRef: p.ctx.sourceMessageId,
+        phase: p.ctx.phase,
+        latencyMs: 0,
+        costMicro: 0,
+        output: { gate: 'research_continuation', reason: 'new_hard_condition_unresearched' },
+      });
+      try {
+        result = await runner.run(agent, researchFollowupInstruction(p.ctx), {
+          context: p.ctx,
+          session,
+          maxTurns: 3,
+          signal: AbortSignal.timeout(remaining),
+        });
+      } catch (error) {
+        if (!(error instanceof Error) || /Guardrail/.test(error.name)) throw error;
+        p.ctx.sourceFailures ??= [];
+        p.ctx.sourceFailures.push('processing:' + error.name);
+        return finalizeRequest(p, session);
+      }
+    }
   }
   if (
     p.deps.answerRequests &&

@@ -189,6 +189,7 @@ it('tells finalization which evidence families it can deliver without calling un
   expect(packet.deliveryContract).toEqual({
     referenceFamilies: ['k', 'm'],
     requiresTaskClarification: false,
+    unresearchedConditions: [],
     otherSourceCounts: { xhs: 1, legacyWeb: 0 },
   });
 });
@@ -207,7 +208,7 @@ it('passes current validation failures to the fresh finalization input', () => {
   );
 });
 
-it('limits delivery to its source whitelist and keeps the evidence budget', () => {
+it('prioritizes selected delivery sources while retaining complementary evidence within budget', () => {
   const ctx = context();
   ctx.knowledgeSources = Array.from({ length: 8 }, (_, s) => ({
     ref: 'k' + s,
@@ -221,7 +222,8 @@ it('limits delivery to its source whitelist and keeps the evidence budget', () =
     passages: Array<{ text: string }>;
     omittedPassageIds: string[];
   }>;
-  expect(evidence.map((s) => s.ref)).toEqual(ctx.deliverySourceRefs);
+  expect(evidence.slice(0, 4).map((s) => s.ref)).toEqual(ctx.deliverySourceRefs);
+  expect(evidence).toHaveLength(8);
   expect(evidence.every((s) => s.passages.length > 0)).toBe(true);
   expect(
     evidence.flatMap((s) => s.passages).reduce((n, p) => n + p.text.length, 0),

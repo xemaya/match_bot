@@ -96,6 +96,7 @@ export function runtimeContext(ctx: MatchContext, stage: PromptStage): Record<st
       ? {
           deliveryContract: {
             referenceFamilies: ['k', 'm'],
+            unresearchedConditions: delivery?.unresearchedConditions ?? [],
             requiresTaskClarification: ['ambiguous', 'unbound'].includes(
               ctx.taskUpdate?.kind ?? '',
             ),

@@ -1,3 +1,4 @@
+import { pendingResearchConditions } from './research-readiness.js';
 import type { MatchContext } from './context.js';
 import { buildMarketChoices } from './market-choices.js';
 import { marketListingForModel } from './market-research.js';
@@ -62,7 +63,8 @@ export function canHandOffToDelivery(ctx: MatchContext): boolean {
     ctx.answerRecorded ||
     ctx.replySuppressed ||
     ctx.taskProgressVersion !== task.requirementsVersion ||
-    !['deliver', 'ask_user'].includes(task.nextStep?.action ?? '')
+    !['deliver', 'ask_user'].includes(task.nextStep?.action ?? '') ||
+    (task.nextStep?.action === 'deliver' && pendingResearchConditions(ctx).length > 0)
   )
     return false;
   // The existing structured XHS-only composer remains responsible for note-only research.
@@ -126,14 +128,14 @@ export function buildDeliveryPacket(ctx: MatchContext) {
     .flatMap((id) => task!.evidence.filter((e) => e.id === id));
   const knowledge = market.length
     ? []
-    : (ctx.knowledgeSources ?? [])
-        .filter((s) => !preferred.size || preferred.has(s.ref))
+    : [...(ctx.knowledgeSources ?? [])]
         .sort(
           (a, b) =>
+            Number(preferred.has(b.ref)) - Number(preferred.has(a.ref)) ||
             Number(proofs.some((e) => e.url === b.url)) -
-            Number(proofs.some((e) => e.url === a.url)),
+              Number(proofs.some((e) => e.url === a.url)),
         )
-        .slice(0, 6)
+        .slice(0, 16)
         .map((source) => {
           const relevant = source.passages.filter((p) =>
             proofs.some(
@@ -145,10 +147,12 @@ export function buildDeliveryPacket(ctx: MatchContext) {
             ref: source.ref,
             title: source.title,
             url: source.url,
-            passages: (relevant.length ? relevant : source.passages).slice(
-              0,
-              relevant.length ? 6 : 4,
-            ),
+            // Evidence preference must not discard another fact on the same page.
+            // runtimeContext applies the existing breadth-first 24000-character budget.
+            passages: [
+              ...relevant,
+              ...source.passages.filter((p) => !relevant.some((r) => r.id === p.id)),
+            ].slice(0, 12),
           };
         });
   const next = task?.nextStep;
@@ -182,6 +186,7 @@ export function buildDeliveryPacket(ctx: MatchContext) {
           ),
         }
       : null,
+    unresearchedConditions: pendingResearchConditions(ctx),
     failures: ctx.sourceFailures ?? [],
   };
 }

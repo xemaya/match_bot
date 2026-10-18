@@ -1,3 +1,4 @@
+import { pendingResearchConditions } from '../research-readiness.js';
 import { taskQuestionAnswerType } from '../task-outbound.js';
 import {
   assessTaskReadiness,
@@ -72,7 +73,18 @@ export function recordTaskProgressTool(deps: AgentDeps) {
           return 'research deadline reached; do not continue or save obsolete work';
         }
         const current = ctx.task!;
-        recordTaskProgress({ task: current, ...progress });
+        const candidate = recordTaskProgress({ task: current, ...progress });
+        const missingResearch = pendingResearchConditions({ ...ctx, task: candidate });
+        if (progress.nextStep.action === 'deliver' && missingResearch.length) {
+          progress.nextStep = {
+            action: 'research',
+            owner: 'agent',
+            reason: (
+              'New hard conditions need a focused fresh query before delivery: ' +
+              missingResearch.join(', ')
+            ).slice(0, 500),
+          };
+        }
         const result = await deps.repos.tasks.recordProgress({
           access: {
             userId: ctx.userId,
@@ -94,7 +106,7 @@ export function recordTaskProgressTool(deps: AgentDeps) {
         }
         ctx.task = result.task;
         ctx.taskProgressVersion = result.task.requirementsVersion;
-        if (args.next.action === 'deliver' || args.next.action === 'ask_user')
+        if (progress.nextStep.action === 'deliver' || progress.nextStep.action === 'ask_user')
           ctx.deliverySourceRefs = [
             ...new Set(
               args.checks.flatMap((c) => c.sources.map((s) => s.ref.replace(/:p\d+$/, ''))),
