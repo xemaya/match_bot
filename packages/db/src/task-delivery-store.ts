@@ -1,3 +1,4 @@
+import { persistedChannelRoute } from '@matchbot/domain';
 import type { OutboundDraft } from '@matchbot/domain';
 import type { Prisma, PrismaClient, OutboundMessage } from './generated/client.js';
 import { lockExecutionUser } from './execution-fence.js';
@@ -18,12 +19,20 @@ async function currentTask(tx: Prisma.TransactionClient, row: OutboundMessage) {
     source.userId !== record.userId ||
     record.channel !== row.channel ||
     row.target !== record.chatId ||
-    (source.group?.externalId ?? source.user.externalId) !== record.chatId
+    (row.threadId ?? '') !== record.threadId ||
+    (persistedChannelRoute(source.channelRoute)?.threadId ?? '') !== record.threadId ||
+    (persistedChannelRoute(source.channelRoute)?.chatId ??
+      source.group?.externalId ??
+      source.user.externalId) !== record.chatId
   )
     return null;
   const access = {
     userId: record.userId,
-    scope: { channel: record.channel, chatId: record.chatId },
+    scope: {
+      channel: record.channel,
+      chatId: record.chatId,
+      ...(record.threadId ? { threadId: record.threadId } : {}),
+    },
   };
   const task = await tasksRepo(tx as PrismaClient).findById({ access, id: record.id });
   return task ? { task, access } : null;

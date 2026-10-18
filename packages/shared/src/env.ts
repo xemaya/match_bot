@@ -53,8 +53,20 @@ export const envSchema = z
     JEV_MODEL: z.string().default('typesafe/jev-1.13'),
     TELEGRAM_ACTOR_ALLOWLIST: actorAllowlistEnv,
     ACTOR_LAB_CONFIG_PATH: z.string().min(1).optional(),
-    TELEGRAM_BOT_TOKEN: z.string().min(1),
-    TELEGRAM_OPS_CHAT_ID: z.string().min(1),
+    CHANNEL_MODE: z.enum(['telegram', 'feishu', 'both']).default('telegram'),
+    CHANNEL_INSTALLATION_ID: z.string().min(1).max(128).default('local'),
+    TELEGRAM_BOT_TOKEN: z.string().default(''),
+    TELEGRAM_OPS_CHAT_ID: z.string().default(''),
+    FEISHU_APP_ID: z.string().default(''),
+    FEISHU_APP_SECRET: z.string().default(''),
+    FEISHU_TENANT_ID: z.string().default(''),
+    FEISHU_REGION: z.enum(['feishu', 'lark']).default('feishu'),
+    FEISHU_OPS_CHAT_ID: z.string().default(''),
+    FEISHU_ALLOWED_USERS: z.string().default(''),
+    FEISHU_ALLOWED_CHATS: z.string().default(''),
+    FEISHU_REVIEWERS: z.string().default(''),
+    TELEGRAM_REVIEWERS: z.string().default(''),
+
     DEFAULT_PHASE: z.coerce.number().int().min(0).max(2).default(0),
     // run_states.snapshot 落库加密口令（AGENTS.md §6）。Phase 0 无审批中断用不到，故 optional；
     // 一旦进入 Phase 1（产生中断快照）就必须配置，否则 runInbound 在写快照时报错。
@@ -73,6 +85,29 @@ export const envSchema = z
       .default('false')
       .transform((value) => value === 'true'),
     OUTBOUND_UNSURE_ACTION: z.enum(['drop', 'review']).default('drop'),
+  })
+  .superRefine((env, ctx) => {
+    const required =
+      env.CHANNEL_MODE === 'telegram'
+        ? (['TELEGRAM_BOT_TOKEN', 'TELEGRAM_OPS_CHAT_ID'] as const)
+        : env.CHANNEL_MODE === 'feishu'
+          ? ([
+              'FEISHU_APP_ID',
+              'FEISHU_APP_SECRET',
+              'FEISHU_TENANT_ID',
+              'FEISHU_OPS_CHAT_ID',
+            ] as const)
+          : ([
+              'TELEGRAM_BOT_TOKEN',
+              'TELEGRAM_OPS_CHAT_ID',
+              'FEISHU_APP_ID',
+              'FEISHU_APP_SECRET',
+              'FEISHU_TENANT_ID',
+              'FEISHU_OPS_CHAT_ID',
+            ] as const);
+    for (const key of required)
+      if (!env[key].trim())
+        ctx.addIssue({ code: 'custom', path: [key], message: 'Required for enabled channel' });
   })
   .refine((env) => env.JEV_POLICY !== 'strict' || !!env.JEV_API_KEY.trim(), {
     message: 'JEV_API_KEY is required with JEV_POLICY=strict',

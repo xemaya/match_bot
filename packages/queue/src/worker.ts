@@ -1,6 +1,6 @@
 import { Worker, DelayedError } from 'bullmq';
 import { Redis } from 'ioredis';
-import type { z } from 'zod';
+import { z } from 'zod';
 import {
   QUEUE_NAMES,
   inboundJobSchema,
@@ -13,7 +13,7 @@ const schemas: Record<QueueName, z.ZodTypeAny> = {
   [QUEUE_NAMES.inbound]: inboundJobSchema,
   [QUEUE_NAMES.resume]: resumeRunJobSchema,
   [QUEUE_NAMES.outbound]: outboundJobSchema,
-  [QUEUE_NAMES.cron]: inboundJobSchema.partial(), // cron 无载荷；用宽松 schema
+  [QUEUE_NAMES.cron]: z.object({}).strict(), // cron jobs carry no inbound-message fields
 };
 
 export function createWorker<T>(

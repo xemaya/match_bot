@@ -118,7 +118,11 @@ export const taskSchema = z.strictObject({
   schemaVersion: z.literal(1).default(1),
   id,
   ownerUserId: id,
-  scope: z.strictObject({ channel: z.enum(['telegram', 'whatsapp']), chatId: id }),
+  scope: z.strictObject({
+    channel: z.enum(['telegram', 'feishu', 'whatsapp']),
+    chatId: id,
+    threadId: id.optional(),
+  }),
   objective: z.string().min(1).max(600),
   category: z.enum(DEMAND_CATEGORIES).default('other'),
   counterparty: z.enum(['supply', 'demand', 'peer']).nullable().default(null),

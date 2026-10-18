@@ -36,6 +36,9 @@
     },
     {
       "path": "../../packages/jev"
+    },
+    {
+      "path": "../../packages/channels"
     }
   ]
 }

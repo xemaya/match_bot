@@ -1,0 +1,31 @@
+{
+  "name": "@matchbot/host",
+  "version": "0.0.0",
+  "private": true,
+  "description": "MatchBot lifecycle and channel composition",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "test": "vitest run --root ../.. --dir packages/host"
+  },
+  "dependencies": {
+    "@matchbot/shared": "workspace:*",
+    "@matchbot/domain": "workspace:*",
+    "@matchbot/db": "workspace:*",
+    "@matchbot/queue": "workspace:*",
+    "@matchbot/runtime": "workspace:*",
+    "@matchbot/channels": "workspace:*",
+    "@matchbot/channel-feishu": "workspace:*",
+    "@matchbot/channel-telegram": "workspace:*"
+  },
+  "devDependencies": {}
+}

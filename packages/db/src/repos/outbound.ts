@@ -1,3 +1,4 @@
+import { persistedChannelRoute, type Channel } from '@matchbot/domain';
 import { randomUUID } from 'node:crypto';
 import { outboundDraftSchema, type OutboundDraft, type OutboundKind } from '@matchbot/domain';
 import { z } from 'zod';
@@ -19,10 +20,7 @@ const fence = z.object({
   now: z.date().optional(),
 });
 const receipt = fence.extend({
-  externalMessageId: z
-    .string()
-    .regex(/^[1-9]\d{0,29}$/)
-    .nullable(),
+  externalMessageId: z.string().min(1).max(256).nullable(),
 });
 const startFence = fence.extend({
   opsChatId: opsChatSchema.optional(),
@@ -59,25 +57,42 @@ async function trace(
     },
   });
 }
-export function outboundRepo(prisma: PrismaClient, accountId = '') {
-  const senderAccountId = z
-    .union([z.literal(''), z.string().regex(/^[1-9]\d{0,19}$/)])
-    .parse(accountId);
+export function outboundRepo(
+  prisma: PrismaClient,
+  accountId = '',
+  channel: Channel = 'telegram',
+  channelScope = '',
+) {
+  const senderAccountId = z.string().max(1000).parse(accountId);
   // Reuse an existing transaction boundary in repositories and rollback integration tests.
   const atomic = <T>(fn: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> =>
     typeof prisma.$transaction === 'function' ? prisma.$transaction(fn) : fn(prisma);
   return {
+    findDeliveredByExternal(input: {
+      target: string;
+      externalMessageId: string;
+    }): Promise<OutboundMessage | null> {
+      return prisma.outboundMessage.findFirst({
+        where: {
+          channel,
+          senderAccountId,
+          target: input.target,
+          externalMessageId: input.externalMessageId,
+          status: 'sent',
+        },
+      });
+    },
     countUnfinished(): Promise<number> {
       return prisma.outboundMessage.count({ where: { status: { in: ['pending', 'sending'] } } });
     },
     findReplyForSource(input: {
-      channel: 'telegram' | 'whatsapp';
+      channel: 'telegram' | 'feishu' | 'whatsapp';
       target: string;
       sourceMessageId: string;
     }): Promise<OutboundMessage | null> {
       const p = z
         .object({
-          channel: z.enum(['telegram', 'whatsapp']),
+          channel: z.enum(['telegram', 'feishu', 'whatsapp']),
           target: z.string().min(1),
           sourceMessageId: z.string().min(1),
         })
@@ -130,9 +145,15 @@ export function outboundRepo(prisma: PrismaClient, accountId = '') {
           });
           return null;
         }
+        if (
+          eligible.source.user.channelScope !== channelScope ||
+          eligible.source.user.channel !== channel
+        )
+          throw new Error('approval account scope mismatch');
         const row = await tx.outboundMessage.create({
           data: {
-            channel: 'telegram',
+            channel,
+            senderAccountId,
             target: p.opsChatId,
             text: eligible.text,
             kind: 'notification',
@@ -149,21 +170,32 @@ export function outboundRepo(prisma: PrismaClient, accountId = '') {
     },
     create(raw: OutboundDraft, status: 'dry_run' | 'pending'): Promise<OutboundMessage> {
       const draft = outboundDraftSchema.parse(raw);
+      if (channelScope && draft.channel !== channel)
+        throw new Error('outbound channel scope mismatch');
       if (draft.taskDelivery && !draft.execution)
         throw new Error('task delivery requires a fenced source request');
       const write = async (tx: Prisma.TransactionClient) => {
         let requestKey: string | null = null;
+        let threadId: string | null = null;
         if (draft.execution) {
           const source = await tx.message.findFirst({
             where: { id: draft.execution.messageId, userId: draft.execution.userId },
             include: {
-              user: { select: { channel: true, externalId: true } },
+              user: { select: { channel: true, externalId: true, channelScope: true } },
               group: { select: { externalId: true } },
             },
           });
-          if (!source || source.user.channel !== draft.channel)
+          if (
+            !source ||
+            source.user.channel !== draft.channel ||
+            source.user.channelScope !== channelScope
+          )
             throw new Error('outbound execution source inaccessible');
-          const target = source.group?.externalId ?? source.user.externalId;
+          threadId = persistedChannelRoute(source.channelRoute)?.threadId ?? null;
+          const target =
+            persistedChannelRoute(source.channelRoute)?.chatId ??
+            source.group?.externalId ??
+            source.user.externalId;
           if (
             (draft.kind ?? 'recommendation') !== 'lead' &&
             draft.target !== target &&
@@ -189,7 +221,14 @@ export function outboundRepo(prisma: PrismaClient, accountId = '') {
           }
           if (draft.taskDelivery) {
             const selected = await tasksRepo(tx as PrismaClient).findById({
-              access: { userId: source.userId, scope: { channel: draft.channel, chatId: target } },
+              access: {
+                userId: source.userId,
+                scope: {
+                  channel: draft.channel,
+                  chatId: target,
+                  ...(threadId ? { threadId } : {}),
+                },
+              },
               id: draft.taskDelivery.id,
             });
             if (
@@ -215,6 +254,7 @@ export function outboundRepo(prisma: PrismaClient, accountId = '') {
         const row = await tx.outboundMessage.create({
           data: {
             senderAccountId,
+            threadId,
             channel: draft.channel,
             target: draft.target,
             text: draft.text,
@@ -254,7 +294,7 @@ export function outboundRepo(prisma: PrismaClient, accountId = '') {
         const raw: unknown = await tx.$queryRaw(Prisma.sql`
           WITH candidates AS (
             SELECT id FROM outbound_messages
-            WHERE status = 'pending' AND channel = 'telegram' AND phase IN (1,2)
+            WHERE status = 'pending' AND channel = ${channel}::"Channel" AND sender_account_id = ${senderAccountId} AND phase IN (1,2)
               AND attempt_count < ${MAX_ATTEMPTS} AND (next_attempt_at IS NULL OR next_attempt_at <= ${now})
             ORDER BY created_at,id LIMIT ${count} FOR UPDATE SKIP LOCKED
           ) UPDATE outbound_messages AS o SET status = 'sending',lease_token = ${token},lease_expires_at = ${expiresAt},
@@ -293,7 +333,9 @@ export function outboundRepo(prisma: PrismaClient, accountId = '') {
               })
             : null;
           const recipient = await tx.group.findUnique({
-            where: { channel_externalId: { channel: 'telegram', externalId: row.target } },
+            where: {
+              channel_externalId: { channel: row.channel, externalId: row.target, channelScope },
+            },
             select: { isActive: true },
           });
           if (!eligible?.ok || row.target !== p.opsChatId || recipient?.isActive === false) {

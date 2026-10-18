@@ -1,3 +1,4 @@
+import { persistedChannelRoute, conversationBindingKey } from '@matchbot/domain';
 import { buildDeliveryPacket } from './delivery-context.js';
 import { replyRequestStatusTool } from './tools/reply-request-status.js';
 import { canSkipSupplementReply } from './supplement-replies.js';
@@ -70,6 +71,7 @@ export async function runInbound(p: {
   const session = createPgSession({
     repos: p.deps.repos,
     userId: p.ctx.userId,
+    ...(p.ctx.sessionKey ? { scopeKey: p.ctx.sessionKey } : {}),
     isolatePreviousTurns: !!p.deps.answerRequests,
   });
   const recovery = p.ctx.execution
@@ -252,6 +254,7 @@ async function finalizeRequest(
   const deliverySession = createPgSession({
     repos: p.deps.repos,
     userId: p.ctx.userId,
+    ...(p.ctx.sessionKey ? { scopeKey: p.ctx.sessionKey } : {}),
     isolatePreviousTurns: true,
   });
   await p.deps.repos.traces.create({
@@ -464,7 +467,11 @@ export async function resumeRun(p: {
       state.reject(item, { message });
     }
   }
-  const session = createPgSession({ repos: p.deps.repos, userId: ctx.userId });
+  const session = createPgSession({
+    repos: p.deps.repos,
+    userId: ctx.userId,
+    ...(ctx.sessionKey ? { scopeKey: ctx.sessionKey } : {}),
+  });
   const result = await runner.run(agent, state, {
     context: ctx,
     session,
@@ -502,14 +509,26 @@ async function rebuildContext(
       throw new ObsoleteResumeError();
     const user = await deps.repos.users.findById(execution.userId);
     if (!user) throw new ObsoleteResumeError();
+    const route = persistedChannelRoute(message.channelRoute);
     const group = message.groupId
       ? await deps.repos.groups.findByExternal(user.channel, runState.chatId)
       : null;
-    if (message.groupId ? group?.id !== message.groupId : user.externalId !== runState.chatId)
+    if (
+      message.groupId
+        ? group?.id !== message.groupId
+        : (route?.chatId ?? user.externalId) !== runState.chatId
+    )
       throw new ObsoleteResumeError();
     const task = message.taskId
       ? await deps.repos.tasks.findById({
-          access: { userId: user.id, scope: { channel: user.channel, chatId: runState.chatId } },
+          access: {
+            userId: user.id,
+            scope: {
+              channel: user.channel,
+              chatId: runState.chatId,
+              ...(route?.threadId ? { threadId: route.threadId } : {}),
+            },
+          },
           id: message.taskId,
         })
       : null;
@@ -523,7 +542,14 @@ async function rebuildContext(
     if (
       task &&
       (await deps.repos.tasks.findLatestUserMessageId({
-        access: { userId: user.id, scope: { channel: user.channel, chatId: runState.chatId } },
+        access: {
+          userId: user.id,
+          scope: {
+            channel: user.channel,
+            chatId: runState.chatId,
+            ...(route?.threadId ? { threadId: route.threadId } : {}),
+          },
+        },
         id: task.id,
       })) !== message.id
     )
@@ -532,6 +558,16 @@ async function rebuildContext(
       execution,
       userId: user.id,
       channel: user.channel,
+      ...(route?.account
+        ? {
+            sessionKey: conversationBindingKey({
+              ...route,
+              channel: user.channel,
+              userId: user.externalId,
+            }),
+          }
+        : {}),
+      ...(route?.threadId ? { threadId: route.threadId } : {}),
       chatId: runState.chatId,
       groupId: message.groupId,
       phase: runState.phase === 1 || runState.phase === 2 ? runState.phase : 0,

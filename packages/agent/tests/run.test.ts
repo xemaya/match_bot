@@ -1437,6 +1437,92 @@ describe('runInbound', () => {
     );
     model.assertComplete();
   });
+  it('keeps Feishu scoped history and routing through approval resume', async () => {
+    const model = new ScriptedModel([[replyCall()]]),
+      { deps, repos, runStates } = makeDeps(model);
+    const account = { installationId: 'local', accountId: 'app', tenantId: 'tenant' };
+    const route = {
+      account,
+      chatId: 'oc_chat',
+      threadId: 'omt_thread',
+      conversationType: 'group' as const,
+    };
+    const sessionKey = JSON.stringify([
+      'feishu',
+      JSON.stringify(['local', 'app', 'tenant']),
+      'oc_chat',
+      'omt_thread',
+      'ou_user',
+    ]);
+    await runInbound({
+      deps: deps as never,
+      ctx: {
+        ...ctx(1),
+        channel: 'feishu',
+        chatId: route.chatId,
+        threadId: route.threadId,
+        sessionKey,
+      },
+      input: 'need a van',
+    });
+    const row = runStates[0];
+    if (!row) throw new Error('missing snapshot');
+    const fresh = {
+      ...repos,
+      messages: {
+        findById: vi.fn().mockResolvedValue({
+          id: 'm1',
+          userId: 'u1',
+          externalId: 'original-message',
+          groupId: 'g',
+          text: 'need a van',
+          taskId: null,
+          channelRoute: route,
+        }),
+      },
+      users: {
+        findById: vi.fn().mockResolvedValue({ id: 'u1', channel: 'feishu', externalId: 'ou_user' }),
+      },
+      groups: {
+        findByExternal: vi
+          .fn()
+          .mockResolvedValue({ id: 'g', isActive: true, phase: 1, rateLimitPerDay: null }),
+      },
+      executions: {
+        recoveryFlags: vi
+          .fn()
+          .mockResolvedValue({ outboundBlocked: false, answerInputExhausted: false }),
+      },
+    };
+    const modern = { ...fresh, forExecution: vi.fn(() => fresh) },
+      lease = { userId: 'u1', messageId: 'm1', token: 'fresh-lease', fence: 2 };
+    model.enqueue([assistantMessage('posted')]);
+    const result = await resumeRun({
+      deps: { ...deps, repos: modern } as never,
+      runState: { ...row, status: 'consumed', messageId: 'm1' } as never,
+      approval: { runStateId: row.id, decision: 'approve' } as never,
+      execution: lease,
+    });
+    expect(result.kind).toBe('completed');
+    expect(repos.demands.findOpenByUser).not.toHaveBeenCalled();
+    expect(repos.outbound.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        execution: lease,
+        replyToMessageId: 'original-message',
+        mentionUserId: 'ou_user',
+        channel: 'feishu',
+        target: 'oc_chat',
+      }),
+      'pending',
+    );
+    expect(repos.sessionItems.append).toHaveBeenLastCalledWith(
+      'u1',
+      expect.any(Array),
+      undefined,
+      sessionKey,
+    );
+    model.assertComplete();
+  });
   it('refuses a modern approval after its task conditions change, before executing the old tool', async () => {
     const model = new ScriptedModel([[replyCall()]]),
       { deps, repos, runStates } = makeDeps(model);

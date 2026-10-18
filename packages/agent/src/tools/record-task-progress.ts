@@ -76,7 +76,11 @@ export function recordTaskProgressTool(deps: AgentDeps) {
         const result = await deps.repos.tasks.recordProgress({
           access: {
             userId: ctx.userId,
-            scope: { channel: ctx.channel ?? 'telegram', chatId: ctx.chatId },
+            scope: {
+              channel: ctx.channel ?? 'telegram',
+              chatId: ctx.chatId,
+              ...(ctx.threadId ? { threadId: ctx.threadId } : {}),
+            },
           },
           id: current.id,
           expectedRevision: current.revision,

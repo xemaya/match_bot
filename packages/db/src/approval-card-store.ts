@@ -1,13 +1,18 @@
+import { persistedChannelRoute } from '@matchbot/domain';
 import { formatApprovalPreview } from '@matchbot/domain';
 import type { Phase } from '@matchbot/domain';
 import { z } from 'zod';
 import { lockExecutionUser } from './execution-fence.js';
 import type { Prisma } from './generated/client.js';
 
-export const opsChatSchema = z
+const telegramOpsChatSchema = z
   .string()
   .regex(/^-[1-9]\d{0,15}$/)
   .refine((value) => Number.isSafeInteger(Number(value)));
+export const opsChatSchema = z.union([
+  telegramOpsChatSchema,
+  z.string().regex(/^oc_[A-Za-z0-9_-]{1,200}$/),
+]);
 export const phaseSchema = z.union([z.literal(0), z.literal(1), z.literal(2)]);
 function phase(value: number): Phase {
   return value === 1 || value === 2 ? value : 0;
@@ -34,8 +39,9 @@ export async function approvalCardEligibility(
     !source?.executionKey ||
     !source.text ||
     !['running', 'waiting_approval'].includes(source.executionStatus ?? '') ||
-    source.user.channel !== 'telegram' ||
-    (source.group?.externalId ?? source.user.externalId) !== rs.chatId ||
+    (persistedChannelRoute(source.channelRoute)?.chatId ??
+      source.group?.externalId ??
+      source.user.externalId) !== rs.chatId ||
     source.receivedAt.getTime() < p.now.getTime() - 30 * 86400e3
   )
     return { ok: false as const, reason: 'source_unavailable', obsolete: true };
@@ -55,6 +61,7 @@ export async function approvalCardEligibility(
       task.userId !== rs.userId ||
       task.channel !== source.user.channel ||
       task.chatId !== rs.chatId ||
+      task.threadId !== (persistedChannelRoute(source.channelRoute)?.threadId ?? '') ||
       task.requirementsVersion !== source.taskRequirementsVersion ||
       ['completed', 'cancelled', 'expired'].includes(task.status) ||
       latest?.sourceMessageId !== source.id

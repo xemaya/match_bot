@@ -15,6 +15,7 @@ export async function lockExecutionUser(tx: Prisma.TransactionClient, userId: st
       id: true,
       channel: true,
       externalId: true,
+      channelScope: true,
       executionFence: true,
       executionLeaseToken: true,
       executionLeaseExpiresAt: true,

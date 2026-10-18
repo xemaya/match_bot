@@ -20,6 +20,7 @@ export function canSkipSupplementReply(ctx: MatchContext): boolean {
     ctx.taskUpdate?.kind === 'continued' &&
     task.ownerUserId === ctx.userId &&
     task.scope.chatId === ctx.chatId &&
+    (task.scope.threadId ?? '') === (ctx.threadId ?? '') &&
     task.scope.channel === (ctx.channel ?? 'telegram') &&
     !['completed', 'cancelled', 'expired'].includes(task.status)
   );

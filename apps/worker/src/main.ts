@@ -40,8 +40,8 @@ for (const w of workers) {
 
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, () => {
-    stopApprovalDispatch();
     void (async () => {
+      await stopApprovalDispatch();
       await Promise.all(workers.map((w) => w.close()));
       await closeQueues(queues);
       await disconnectPrisma();

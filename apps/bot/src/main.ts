@@ -76,12 +76,12 @@ const stopResumeDispatch = startResumeDispatch({ repos, queues, logger: log });
 
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, () => {
-    stopLoop();
-    stopInboundDispatch();
-    stopResumeDispatch();
-    void bot.stop();
-    void closeQueues(queues);
-    void disconnectPrisma();
+    void (async () => {
+      await bot.stop();
+      await Promise.all([stopLoop(), stopInboundDispatch(), stopResumeDispatch()]);
+      await closeQueues(queues);
+      await disconnectPrisma();
+    })().catch(() => log.error('bot shutdown failed'));
   });
 }
 log.info({ botId: me.id, phase: env.DEFAULT_PHASE }, 'bot started');

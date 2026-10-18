@@ -86,3 +86,20 @@ it('targeted allows missing Jev credentials, strict remains the default', () => 
   expect(loadEnv({ ...without, JEV_POLICY: 'targeted' }).JEV_API_KEY).toBe('');
   expect(() => loadEnv({ ...base, JEV_POLICY: 'disabled' })).toThrow();
 });
+
+it('starts Feishu without dummy Telegram credentials, but validates enabled-channel secrets', () => {
+  const inputs = {
+    DATABASE_URL: base.DATABASE_URL,
+    REDIS_URL: base.REDIS_URL,
+    DEEPSEEK_API_KEY: 'test',
+    JEV_POLICY: 'targeted',
+    CHANNEL_MODE: 'feishu',
+    FEISHU_APP_ID: 'cli_test',
+    FEISHU_APP_SECRET: 'test',
+    FEISHU_TENANT_ID: 'tenant',
+    FEISHU_OPS_CHAT_ID: 'oc_ops',
+  };
+  expect(loadEnv(inputs).TELEGRAM_BOT_TOKEN).toBe('');
+  expect(() => loadEnv({ ...inputs, FEISHU_APP_SECRET: '' })).toThrow();
+  expect(() => loadEnv({ ...inputs, CHANNEL_MODE: 'both' })).toThrow();
+});

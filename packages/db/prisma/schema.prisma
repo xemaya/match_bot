@@ -11,6 +11,7 @@ datasource db {
 }
 
 enum Channel {
+  feishu
   telegram
   whatsapp
 }
@@ -89,6 +90,7 @@ enum TraceKind {
 }
 
 model User {
+  channelScope String @default("") @map("channel_scope")
   id           String   @id @default(cuid())
   channel      Channel
   externalId   String   @map("external_id") // Telegram user id 等，字符串存
@@ -109,11 +111,12 @@ model User {
   runStates    RunState[]
   tasks        Task[]
 
-  @@unique([channel, externalId])
+  @@unique([channel, externalId, channelScope], name: "channel_externalId")
   @@map("users")
 }
 
 model Group {
+  channelScope String @default("") @map("channel_scope")
   id                String   @id @default(cuid())
   channel           Channel
   externalId        String   @map("external_id")
@@ -129,11 +132,12 @@ model Group {
   messages Message[]
   supplies Supply[]
 
-  @@unique([channel, externalId])
+  @@unique([channel, externalId, channelScope], name: "channel_externalId")
   @@map("groups")
 }
 
 model Message {
+  channelRoute Json? @map("channel_route")
   id         String   @id @default(cuid())
   groupId    String?  @map("group_id")
   userId     String   @map("user_id")
@@ -199,6 +203,7 @@ model Demand {
 
 /// PRD §13: one scoped user objective; operational revision and requirements version are distinct.
 model Task {
+  threadId String @default("") @map("thread_id")
   id                  String         @id @default(cuid())
   userId              String         @map("user_id")
   channel             Channel
@@ -335,6 +340,7 @@ model Lead {
 
 /// OpenAI Agents SDK Session 存储：一个用户一个 session。
 model SessionItem {
+  scopeKey String @default("") @map("scope_key")
   id          String   @id @default(cuid())
   userId      String   @map("user_id")
   seq         Int
@@ -344,8 +350,8 @@ model SessionItem {
 
   user User @relation(fields: [userId], references: [id])
 
-  @@unique([userId, seq])
-  @@index([userId, operationId])
+  @@unique([userId, scopeKey, seq])
+  @@index([userId, scopeKey, operationId])
   @@map("session_items")
 }
 
@@ -394,6 +400,7 @@ model Approval {
 }
 
 model OutboundMessage {
+  threadId String? @map("thread_id")
   id         String         @id @default(cuid())
   channel    Channel
   target     String         // chat id / user id / supplier contact

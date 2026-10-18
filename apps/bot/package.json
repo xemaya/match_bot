@@ -2,7 +2,7 @@
   "name": "@matchbot/bot",
   "version": "0.0.0",
   "private": true,
-  "description": "grammY 进程：收 Telegram 更新入队；消费出站表发送",
+  "description": "grammY \u8fdb\u7a0b\uff1a\u6536 Telegram \u66f4\u65b0\u5165\u961f\uff1b\u6d88\u8d39\u51fa\u7ad9\u8868\u53d1\u9001",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/main.ts",
@@ -21,7 +21,8 @@
     "@matchbot/queue": "workspace:*",
     "@matchbot/shared": "workspace:*",
     "grammy": "^1.46.0",
-    "zod": "^4.6.5"
+    "zod": "^4.6.5",
+    "@matchbot/channels": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.23.15"

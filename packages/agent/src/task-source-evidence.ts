@@ -196,6 +196,7 @@ export function buildTaskProgress(
     !task ||
     task.ownerUserId !== p.ctx.userId ||
     task.scope.chatId !== p.ctx.chatId ||
+    (task.scope.threadId ?? '') !== (p.ctx.threadId ?? '') ||
     task.scope.channel !== (p.ctx.channel ?? 'telegram')
   )
     throw new TaskEvidenceError('task scope mismatch');

@@ -229,3 +229,12 @@ packages/eval         回放与指标
 - 所有网络调用和长轮询都要有超时上界，不得无限等待。
 - 同一个操作失败 2–3 次就停下来报告，说明试了什么、错在哪，不要反复重试或另辟蹊径绕过。
 - 如实报告。**未通过、阻塞、"只做完一半"都是有价值的结论**；编造通过的指标会让后续工作包建立在假前提上。数字必须来自真实跑过的命令。
+
+## P40 渠道插件契约（2026-10-18 用户授权）
+
+新增 packages/runtime（原 worker 的业务装配/处理流程，依赖 agent、approval、queue、websearch 及基础包）；packages/channels（公共持久入站、投递和分发，依赖 shared/domain/db/queue/gating/approval）；packages/channel-feishu（飞书官方 SDK 独占，依赖 shared/domain/db）。apps 只负责装配。DSH 插件复用以上接口，不得让同一消息同时进入两个 agent 循环。
+
+多账号模式的模型 Session 按 installation/channel/account/tenant/chat/thread/owner binding 隔离，替代 §3.3.7 的全局用户粒度；旧单账号 Telegram 数据保留 legacy scope。业务任务继续绑定用户且必须校验 channel/chat/thread。模型不可选择发送账号。渠道 SDK 不得出现在业务包。
+
+packages/host 负责组合 runtime、channels 和各渠道连接，拥有 DB/队列/连接生命周期；DSH 插件和独立入口复用 host。同一进程只允许一个 host（Agents SDK 的 provider/tracing 是进程全局状态）。插件部署使用独立数据库和 Redis 队列，不与 legacy bot/worker 同时运行。
+packages/dsh-matchbot 仅依赖 host/shared 和 DSH 的 Cordis 生命周期接口；不另建 agent 循环、不把渠道消息注入 DSH 默认交互 session。

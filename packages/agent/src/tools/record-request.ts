@@ -24,7 +24,11 @@ export function recordRequestTool(deps: AgentDeps) {
         const row = await deps.repos.demands.recordForTask({
           access: {
             userId: ctx.userId,
-            scope: { channel: ctx.channel ?? 'telegram', chatId: ctx.chatId },
+            scope: {
+              channel: ctx.channel ?? 'telegram',
+              chatId: ctx.chatId,
+              ...(ctx.threadId ? { threadId: ctx.threadId } : {}),
+            },
           },
           taskId: ctx.task.id,
           requirementsVersion: ctx.task.requirementsVersion,

@@ -1,3 +1,10 @@
+import {
+  accountScopeKey,
+  inboundEventKey,
+  isDirectMessage,
+  channelRouteSchema,
+  persistedChannelRoute,
+} from '@matchbot/domain';
 import { randomUUID } from 'node:crypto';
 import { executionLeaseSchema, inboundMessageSchema, type ExecutionLease } from '@matchbot/domain';
 import { hashText } from '@matchbot/shared';
@@ -131,7 +138,7 @@ export function executionsRepo(prisma: PrismaClient) {
         orderBy: [{ receivedAt: 'asc' }, { createdAt: 'asc' }],
         take: count,
         include: {
-          user: { select: { externalId: true, channel: true } },
+          user: { select: { externalId: true, channel: true, channelScope: true } },
           group: { select: { externalId: true } },
         },
       });
@@ -142,6 +149,7 @@ export function executionsRepo(prisma: PrismaClient) {
         message: inboundMessageSchema.parse({
           channel: row.user.channel,
           chatId: row.group?.externalId ?? row.user.externalId,
+          ...persistedChannelRoute(row.channelRoute),
           userId: row.user.externalId,
           messageId: row.externalId,
           text: row.text,
@@ -164,15 +172,18 @@ export function executionsRepo(prisma: PrismaClient) {
           })
           .parse(raw),
         m = p.message;
-      const key = hashText(JSON.stringify([m.channel, m.chatId, m.messageId]));
+      const key = hashText(
+        m.account ? inboundEventKey(m) : JSON.stringify([m.channel, m.chatId, m.messageId]),
+      );
       return inTransaction(prisma, async (tx) => {
         const row = await tx.message.findUnique({
           where: { executionKey: key },
-          include: { user: { select: { channel: true, externalId: true } } },
+          include: { user: { select: { channel: true, externalId: true, channelScope: true } } },
         });
         if (
           !row ||
           row.user.channel !== m.channel ||
+          row.user.channelScope !== accountScopeKey(m.account) ||
           row.user.externalId !== m.userId ||
           row.textHash !== hashText(m.text)
         )
@@ -197,13 +208,19 @@ export function executionsRepo(prisma: PrismaClient) {
         if (
           !user ||
           user.channel !== m.channel ||
+          user.channelScope !== accountScopeKey(m.account) ||
           user.externalId !== m.userId ||
           (p.groupId
-            ? !group || group.channel !== m.channel || group.externalId !== m.chatId
-            : m.chatId !== user.externalId)
+            ? !group ||
+              group.channel !== m.channel ||
+              group.externalId !== m.chatId ||
+              group.channelScope !== accountScopeKey(m.account)
+            : !isDirectMessage(m))
         )
           throw new Error('request source scope mismatch');
-        const key = hashText(JSON.stringify([m.channel, m.chatId, m.messageId]));
+        const key = hashText(
+          m.account ? inboundEventKey(m) : JSON.stringify([m.channel, m.chatId, m.messageId]),
+        );
         const existing = await tx.message.findFirst({
           where: {
             OR: [
@@ -229,6 +246,9 @@ export function executionsRepo(prisma: PrismaClient) {
             userId: p.userId,
             groupId: p.groupId,
             externalId: m.messageId,
+            ...(m.account || m.conversationType || m.threadId
+              ? { channelRoute: channelRouteSchema.parse(m) }
+              : {}),
             text: m.text,
             textHash: hashText(m.text),
             lang: m.lang ?? null,
@@ -408,7 +428,7 @@ export function executionsRepo(prisma: PrismaClient) {
         if (p.task) {
           const user = await tx.user.findUniqueOrThrow({
             where: { id: message.userId },
-            select: { channel: true, externalId: true },
+            select: { channel: true, externalId: true, channelScope: true },
           });
           const group = message.groupId
             ? await tx.group.findUnique({
@@ -421,7 +441,11 @@ export function executionsRepo(prisma: PrismaClient) {
               id: p.task.id,
               userId: message.userId,
               channel: user.channel,
-              chatId: group?.externalId ?? user.externalId,
+              chatId:
+                persistedChannelRoute(message.channelRoute)?.chatId ??
+                group?.externalId ??
+                user.externalId,
+              threadId: persistedChannelRoute(message.channelRoute)?.threadId ?? '',
               requirementsVersion: p.task.requirementsVersion,
             },
           });

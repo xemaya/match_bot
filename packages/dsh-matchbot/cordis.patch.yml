@@ -1,0 +1,5 @@
+- insert:
+    - id: matchbot
+      name: '@matchbot/dsh-matchbot'
+      config:
+        enabled: true

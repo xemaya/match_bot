@@ -1,3 +1,4 @@
+import { persistedChannelRoute } from '@matchbot/domain';
 import { createHash } from 'node:crypto';
 import {
   DEMAND_CATEGORIES,
@@ -97,14 +98,23 @@ function fingerprint(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 function scopeWhere(access: TaskAccess) {
-  return { userId: access.userId, channel: access.scope.channel, chatId: access.scope.chatId };
+  return {
+    userId: access.userId,
+    channel: access.scope.channel,
+    chatId: access.scope.chatId,
+    threadId: access.scope.threadId ?? '',
+  };
 }
 function readTask(row: Task): UserTask {
   return taskSchema.parse({
     ...taskPayloadSchema.parse(row.state),
     id: row.id,
     ownerUserId: row.userId,
-    scope: { channel: row.channel, chatId: row.chatId },
+    scope: {
+      channel: row.channel,
+      chatId: row.chatId,
+      ...(row.threadId ? { threadId: row.threadId } : {}),
+    },
     category: row.category,
     status: row.status,
     revision: row.revision,
@@ -140,8 +150,12 @@ async function requireMessage(prisma: PrismaClient, access: TaskAccess, sourceMe
   });
   if (
     !message ||
+    (persistedChannelRoute(message.channelRoute)?.threadId ?? '') !==
+      (access.scope.threadId ?? '') ||
     (message.group?.channel ?? message.user.channel) !== access.scope.channel ||
-    (message.group?.externalId ?? message.user.externalId) !== access.scope.chatId
+    (persistedChannelRoute(message.channelRoute)?.chatId ??
+      message.group?.externalId ??
+      message.user.externalId) !== access.scope.chatId
   )
     throw new Error('task source message missing or inaccessible');
   return message;
@@ -429,8 +443,9 @@ export function tasksRepo(prisma: PrismaClient) {
         sourceMessageId: p.sourceMessageId,
         intentKey: p.intentKey,
       };
+      const { threadId: _thread, ...uniqueIdentity } = identity;
       const row = await prisma.task.upsert({
-        where: { userId_channel_chatId_sourceMessageId_intentKey: identity },
+        where: { userId_channel_chatId_sourceMessageId_intentKey: uniqueIdentity },
         update: {},
         create: {
           ...identity,

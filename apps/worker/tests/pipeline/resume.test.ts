@@ -17,7 +17,13 @@ function makeDeps(over: Record<string, unknown> = {}) {
     finishResume: vi.fn(() => Promise.resolve(true)),
   };
   const traces = { create: vi.fn(() => Promise.resolve({})) };
-  const base = { runStates, approvals, traces, demands: { findOpenByUser: vi.fn() } };
+  const base = {
+    messages: { findById: vi.fn(() => Promise.resolve({ channelRoute: null })) },
+    runStates,
+    approvals,
+    traces,
+    demands: { findOpenByUser: vi.fn() },
+  };
   const repos = { ...base, forExecution: vi.fn(() => base) };
   const resumeRun = vi.fn(() =>
     Promise.resolve({ kind: 'completed', toolsCalled: ['reply_in_group'] }),

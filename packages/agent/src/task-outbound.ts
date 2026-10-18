@@ -59,6 +59,7 @@ export function taskDeliveryForOutbound(
     !ctx.execution ||
     task.ownerUserId !== ctx.userId ||
     task.scope.chatId !== ctx.chatId ||
+    (task.scope.threadId ?? '') !== (ctx.threadId ?? '') ||
     task.scope.channel !== (ctx.channel ?? 'telegram') ||
     draft.target !== ctx.chatId ||
     draft.kind === 'reaction' ||

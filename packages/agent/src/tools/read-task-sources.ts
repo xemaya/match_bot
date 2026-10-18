@@ -37,6 +37,7 @@ export async function readSavedTaskSources(
     !task ||
     task.ownerUserId !== ctx.userId ||
     task.scope.chatId !== ctx.chatId ||
+    (task.scope.threadId ?? '') !== (ctx.threadId ?? '') ||
     task.scope.channel !== (ctx.channel ?? 'telegram')
   )
     return deny('task scope mismatch');

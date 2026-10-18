@@ -1,0 +1,33 @@
+{
+  "name": "@matchbot/runtime",
+  "version": "0.0.0",
+  "private": true,
+  "description": "MatchBot host-independent business runtime",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "test": "vitest run --root ../.. --dir packages/runtime"
+  },
+  "dependencies": {
+    "@matchbot/shared": "workspace:*",
+    "@matchbot/domain": "workspace:*",
+    "@matchbot/db": "workspace:*",
+    "@matchbot/queue": "workspace:*",
+    "@matchbot/jev": "workspace:*",
+    "@matchbot/gating": "workspace:*",
+    "@matchbot/agent": "workspace:*",
+    "@matchbot/approval": "workspace:*",
+    "@matchbot/websearch": "workspace:*",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {}
+}

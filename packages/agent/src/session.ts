@@ -99,14 +99,20 @@ export function createPgSession(p: {
   repos: Repositories;
   userId: string;
   isolatePreviousTurns?: boolean;
+  scopeKey?: string;
 }): Session {
+  const itemsRepo = p.repos.sessionItems;
   let previousItemCount: number | undefined;
   return {
     getSessionId() {
-      return Promise.resolve(p.userId);
+      return Promise.resolve(p.scopeKey ? JSON.stringify([p.userId, p.scopeKey]) : p.userId);
     },
     async getItems(limit?: number) {
-      const items = (await p.repos.sessionItems.list(p.userId, limit)) as AgentInputItem[];
+      const items = (await itemsRepo.list(
+        p.userId,
+        limit,
+        ...(p.scopeKey ? [p.scopeKey] : []),
+      )) as AgentInputItem[];
       // Keep the user-level session, but do not replay another independent request into this answer.
       if (p.isolatePreviousTurns) {
         previousItemCount ??= items.length;
@@ -118,17 +124,21 @@ export function createPgSession(p: {
       return archiveEphemeralToolResult(stripProviderData(item));
     },
     async addItems(items: AgentInputItem[]) {
-      await p.repos.sessionItems.append(
+      await itemsRepo.append(
         p.userId,
         items.filter((i) => !isRuntimeContextItem(i)).map(stripProviderData),
+        ...(p.scopeKey ? ([undefined, p.scopeKey] as const) : []),
       );
     },
     async popItem() {
-      const item = (await p.repos.sessionItems.popLast(p.userId)) as AgentInputItem | null;
+      const item = (await itemsRepo.popLast(
+        p.userId,
+        ...(p.scopeKey ? [p.scopeKey] : []),
+      )) as AgentInputItem | null;
       return item ?? undefined;
     },
     async clearSession() {
-      await p.repos.sessionItems.clear(p.userId);
+      await itemsRepo.clear(p.userId, ...(p.scopeKey ? [p.scopeKey] : []));
     },
   };
 }

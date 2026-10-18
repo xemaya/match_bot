@@ -263,7 +263,7 @@ export async function executeOutbound(
   const status = decision === 'dry_run' ? 'dry_run' : 'pending';
   const row = await deps.repos.outbound.create(
     {
-      channel: 'telegram',
+      channel: ctx.channel ?? 'telegram',
       phase: ctx.phase,
       ...(ctx.execution ? { execution: ctx.execution } : {}),
       ...(taskDeliveryForOutbound(ctx, d)

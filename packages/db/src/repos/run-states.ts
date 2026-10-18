@@ -1,3 +1,4 @@
+import { persistedChannelRoute } from '@matchbot/domain';
 import type { Phase } from '@matchbot/domain';
 import type { PrismaClient, RunState } from '../generated/client.js';
 import { inTransaction } from '../execution-fence.js';
@@ -64,7 +65,12 @@ export function runStatesRepo(prisma: PrismaClient) {
             where: { id: p.messageId, userId: p.userId },
             include: { user: true, group: true },
           });
-          if (!message || (message.group?.externalId ?? message.user.externalId) !== p.chatId)
+          if (
+            !message ||
+            (persistedChannelRoute(message.channelRoute)?.chatId ??
+              message.group?.externalId ??
+              message.user.externalId) !== p.chatId
+          )
             throw new Error('approval message binding inaccessible');
           if (task) {
             const bound = await tx.task.findFirst({
@@ -73,6 +79,7 @@ export function runStatesRepo(prisma: PrismaClient) {
                 userId: p.userId,
                 channel: message.user.channel,
                 chatId: p.chatId,
+                threadId: persistedChannelRoute(message.channelRoute)?.threadId ?? '',
                 requirementsVersion: task.requirementsVersion,
               },
             });

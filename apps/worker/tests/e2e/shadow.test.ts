@@ -121,7 +121,7 @@ describe('shadow e2e (Phase 0)', () => {
   it('a group message ends as a dry_run outbound row and leaves jev + gate traces', async () => {
     await repos.groups.upsert({ channel: 'telegram', externalId: CHAT, name: 'e2e' });
     await prisma.group.update({
-      where: { channel_externalId: { channel: 'telegram', externalId: CHAT } },
+      where: { channel_externalId: { channel: 'telegram', externalId: CHAT, channelScope: '' } },
       data: { isActive: true, phase: 0 },
     });
     const supplier = await prisma.supplier.create({

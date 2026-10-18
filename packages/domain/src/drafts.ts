@@ -5,7 +5,7 @@ import { DEMAND_CATEGORIES } from './demand.js';
 import { BUDGET_SCOPES } from './task.js';
 
 /** 出站渠道。Phase 0 只有 telegram，whatsapp 是 Phase 2 的占位（架构 §3）。 */
-export const OUTBOUND_CHANNELS = ['telegram', 'whatsapp'] as const;
+export const OUTBOUND_CHANNELS = ['telegram', 'feishu', 'whatsapp'] as const;
 export type OutboundChannel = (typeof OUTBOUND_CHANNELS)[number];
 
 /** 出站用途。频控只数 recommendation；与 Prisma enum OutboundKind 一一对应。 */

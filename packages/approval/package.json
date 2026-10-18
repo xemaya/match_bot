@@ -2,7 +2,7 @@
   "name": "@matchbot/approval",
   "version": "0.0.0",
   "private": true,
-  "description": "审批请求发布（Phase 1 运营群卡片）与决策回收",
+  "description": "\u5ba1\u6279\u8bf7\u6c42\u53d1\u5e03\uff08Phase 1 \u8fd0\u8425\u7fa4\u5361\u7247\uff09\u4e0e\u51b3\u7b56\u56de\u6536",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -21,8 +21,7 @@
     "@matchbot/shared": "workspace:*",
     "@matchbot/domain": "workspace:*",
     "@matchbot/db": "workspace:*",
-    "@matchbot/queue": "workspace:*",
-    "@matchbot/channel-telegram": "workspace:*"
+    "@matchbot/queue": "workspace:*"
   },
   "devDependencies": {}
 }

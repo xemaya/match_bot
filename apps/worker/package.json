@@ -2,7 +2,7 @@
   "name": "@matchbot/worker",
   "version": "0.0.0",
   "private": true,
-  "description": "BullMQ worker：inbound_message / resume_run / cron",
+  "description": "BullMQ worker\uff1ainbound_message / resume_run / cron",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/main.ts",
@@ -21,7 +21,8 @@
     "@matchbot/matcher": "workspace:*",
     "@matchbot/queue": "workspace:*",
     "@matchbot/shared": "workspace:*",
-    "@matchbot/websearch": "workspace:*"
+    "@matchbot/websearch": "workspace:*",
+    "@matchbot/runtime": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.23.15"

@@ -23,7 +23,9 @@ import type { MarketCandidate, MarketResearchQuery } from './market-research.js'
 /** 一次 run 的上下文。Session 粒度是用户；群上下文与开放需求经这里 + instructions 注入。 */
 export interface MatchContext {
   execution?: ExecutionLease;
-  channel?: 'telegram' | 'whatsapp';
+  sessionKey?: string;
+  threadId?: string;
+  channel?: 'telegram' | 'feishu' | 'whatsapp';
   userId: string;
   chatId: string;
   groupId: string | null;

@@ -19,6 +19,7 @@ export async function refreshTaskSourceMemory(p: {
     ctx.outboundBlocked ||
     task.ownerUserId !== ctx.userId ||
     task.scope.chatId !== ctx.chatId ||
+    (task.scope.threadId ?? '') !== (ctx.threadId ?? '') ||
     task.scope.channel !== (ctx.channel ?? 'telegram') ||
     ['completed', 'cancelled', 'expired'].includes(task.status) ||
     ['ambiguous', 'unbound', 'acknowledged', 'completed', 'cancelled'].includes(

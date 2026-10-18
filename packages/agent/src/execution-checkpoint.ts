@@ -8,7 +8,7 @@ const checkpointSchema = z.object({
   version: z.literal(1),
   agentVersion: z.string(),
   inputHash: z.string(),
-  channel: z.enum(['telegram', 'whatsapp']),
+  channel: z.enum(['telegram', 'feishu', 'whatsapp']),
   taskId: z.string().nullable(),
   requirementsVersion: z.number().int().nullable(),
   research: researchContextSchema,

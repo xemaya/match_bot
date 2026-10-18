@@ -196,7 +196,11 @@ export function marketSearchTool(
           const result = await deps.repos.tasks.rememberSearchTerms({
             access: {
               userId: ctx.userId,
-              scope: { channel: ctx.channel ?? 'telegram', chatId: ctx.chatId },
+              scope: {
+                channel: ctx.channel ?? 'telegram',
+                chatId: ctx.chatId,
+                ...(ctx.threadId ? { threadId: ctx.threadId } : {}),
+              },
             },
             id: ctx.task.id,
             sourceMessageId: ctx.sourceMessageId,

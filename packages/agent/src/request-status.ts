@@ -43,6 +43,7 @@ export function renderRequestStatus(ctx: MatchContext): string | null {
   const task =
     ctx.task?.ownerUserId === ctx.userId &&
     ctx.task.scope.chatId === ctx.chatId &&
+    (ctx.task.scope.threadId ?? '') === (ctx.threadId ?? '') &&
     ctx.task.scope.channel === (ctx.channel ?? 'telegram')
       ? ctx.task
       : undefined;

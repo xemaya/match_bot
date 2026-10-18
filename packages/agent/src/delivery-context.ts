@@ -9,6 +9,7 @@ export function scopedDeliveryTask(ctx: MatchContext) {
   const task = ctx.task;
   return task?.ownerUserId === ctx.userId &&
     task.scope.chatId === ctx.chatId &&
+    (task.scope.threadId ?? '') === (ctx.threadId ?? '') &&
     task.scope.channel === (ctx.channel ?? 'telegram')
     ? task
     : undefined;

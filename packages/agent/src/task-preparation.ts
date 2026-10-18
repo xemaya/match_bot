@@ -14,7 +14,11 @@ export async function prepareTaskTurn(p: {
       const task = await p.deps.repos.tasks.findAppliedTurn({
         access: {
           userId: p.ctx.userId,
-          scope: { channel: p.ctx.channel ?? 'telegram', chatId: p.ctx.chatId },
+          scope: {
+            channel: p.ctx.channel ?? 'telegram',
+            chatId: p.ctx.chatId,
+            ...(p.ctx.threadId ? { threadId: p.ctx.threadId } : {}),
+          },
         },
         sourceMessageId: p.ctx.sourceMessageId,
       });
@@ -39,7 +43,11 @@ export async function prepareTaskTurn(p: {
       const anchor = await p.deps.repos.tasks.findReplyAnchor({
         access: {
           userId: p.ctx.userId,
-          scope: { channel: p.ctx.channel ?? 'telegram', chatId: p.ctx.chatId },
+          scope: {
+            channel: p.ctx.channel ?? 'telegram',
+            chatId: p.ctx.chatId,
+            ...(p.ctx.threadId ? { threadId: p.ctx.threadId } : {}),
+          },
         },
         externalMessageId: p.ctx.replyToMessageId,
       });
@@ -47,7 +55,11 @@ export async function prepareTaskTurn(p: {
     }
     p.ctx.taskCandidates = await p.deps.repos.tasks.findOpenByScope({
       userId: p.ctx.userId,
-      scope: { channel: p.ctx.channel ?? 'telegram', chatId: p.ctx.chatId },
+      scope: {
+        channel: p.ctx.channel ?? 'telegram',
+        chatId: p.ctx.chatId,
+        ...(p.ctx.threadId ? { threadId: p.ctx.threadId } : {}),
+      },
     });
     if (
       p.ctx.taskCandidates.length > 100 ||

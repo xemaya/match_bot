@@ -1,17 +1,32 @@
-import { parseApprovalCallback } from '@matchbot/channel-telegram';
+import { z } from 'zod';
 import type { Repositories } from '@matchbot/db';
 import { enqueueResume as defaultEnqueueResume, type Queues } from '@matchbot/queue';
 
-/** Commit the decision and wake intent together; failed Redis transport remains dispatchable. */
-export async function handleApprovalCallback(p: {
+export const approvalDecisionSchema = z.object({
+  runStateId: z.string().regex(/^[A-Za-z0-9_-]{1,160}$/),
+  decision: z.enum(['approve', 'reject', 'ignore']),
+});
+type DecisionDeps = {
   repos: Repositories;
   queues: Queues;
   reviewer: string;
-  data: string;
   enqueueResume?: typeof defaultEnqueueResume;
-}): Promise<'queued' | 'pending' | 'ignored' | 'invalid'> {
-  const parsed = parseApprovalCallback(p.data);
-  if (!parsed) return 'invalid';
+};
+/** Compatibility decoder for existing Telegram callbacks; no platform SDK dependency. */
+export async function handleApprovalCallback(
+  p: DecisionDeps & { data: string },
+): Promise<'queued' | 'pending' | 'ignored' | 'invalid'> {
+  const match = /^apv:([A-Za-z0-9_-]+):(approve|reject|ignore)$/.exec(p.data);
+  if (!match) return 'invalid';
+  return handleApprovalDecision({ ...p, action: { runStateId: match[1]!, decision: match[2]! } });
+}
+/** Caller authenticates source and reviewer; the decision and wake intent commit atomically. */
+export async function handleApprovalDecision(
+  p: DecisionDeps & { action: unknown },
+): Promise<'queued' | 'pending' | 'ignored' | 'invalid'> {
+  const result = approvalDecisionSchema.safeParse(p.action);
+  if (!result.success) return 'invalid';
+  const parsed = result.data;
   const approval = await p.repos.approvals.decide({
     runStateId: parsed.runStateId,
     reviewer: p.reviewer,

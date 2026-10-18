@@ -3,6 +3,37 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const ALLOWED = {
+  '@matchbot/dsh-matchbot': ['@matchbot/host', '@matchbot/shared'],
+  '@matchbot/host': [
+    '@matchbot/shared',
+    '@matchbot/domain',
+    '@matchbot/db',
+    '@matchbot/queue',
+    '@matchbot/runtime',
+    '@matchbot/channels',
+    '@matchbot/channel-feishu',
+    '@matchbot/channel-telegram',
+  ],
+  '@matchbot/runtime': [
+    '@matchbot/shared',
+    '@matchbot/domain',
+    '@matchbot/db',
+    '@matchbot/queue',
+    '@matchbot/jev',
+    '@matchbot/gating',
+    '@matchbot/agent',
+    '@matchbot/approval',
+    '@matchbot/websearch',
+  ],
+  '@matchbot/channels': [
+    '@matchbot/shared',
+    '@matchbot/domain',
+    '@matchbot/db',
+    '@matchbot/queue',
+    '@matchbot/gating',
+    '@matchbot/approval',
+  ],
+  '@matchbot/channel-feishu': ['@matchbot/shared', '@matchbot/domain', '@matchbot/db'],
   '@matchbot/shared': [],
   '@matchbot/domain': ['@matchbot/shared'],
   '@matchbot/db': ['@matchbot/shared', '@matchbot/domain'],
@@ -50,6 +81,7 @@ const EXTERNAL_OWNERS = {
   '@openai/agents': ['@matchbot/agent'],
   // apps/bot 创建并持有 Bot 实例（interfaces.md 的 createTelegramSender / createOpsCardSender
   // 都要求传入 Bot），发送仍必须经 channel-telegram。参照 bullmq 的先例同时允许 app。
+  '@larksuiteoapi/node-sdk': ['@matchbot/channel-feishu'],
   grammy: ['@matchbot/channel-telegram', '@matchbot/bot'],
   '@prisma/client': ['@matchbot/db'],
   '@prisma/adapter-pg': ['@matchbot/db'],

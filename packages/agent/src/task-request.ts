@@ -46,6 +46,7 @@ export function taskCurrentRequest(ctx: MatchContext, input: string): CurrentReq
   if (
     task.ownerUserId !== ctx.userId ||
     task.scope.chatId !== ctx.chatId ||
+    (task.scope.threadId ?? '') !== (ctx.threadId ?? '') ||
     task.scope.channel !== (ctx.channel ?? 'telegram')
   )
     throw new Error('selected task scope mismatch');

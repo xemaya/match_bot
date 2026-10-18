@@ -43,7 +43,11 @@ function newTask(ctx: MatchContext, args: Proposal): UserTask {
   return taskSchema.parse({
     id: 'new-task-proposal',
     ownerUserId: ctx.userId,
-    scope: { channel: ctx.channel ?? 'telegram', chatId: ctx.chatId },
+    scope: {
+      channel: ctx.channel ?? 'telegram',
+      chatId: ctx.chatId,
+      ...(ctx.threadId ? { threadId: ctx.threadId } : {}),
+    },
     objective: args.objective,
     // A catch-all proposal must not erase the specific route already bound from this message.
     category,
@@ -101,6 +105,7 @@ function canRefreshRevision(previous: UserTask, current: UserTask): boolean {
     current.ownerUserId === previous.ownerUserId &&
     current.scope.chatId === previous.scope.chatId &&
     current.scope.channel === previous.scope.channel &&
+    (current.scope.threadId ?? '') === (previous.scope.threadId ?? '') &&
     current.requirementsVersion === previous.requirementsVersion &&
     current.category === previous.category &&
     current.objective === previous.objective &&
@@ -129,7 +134,11 @@ async function applyProposal(p: {
   const candidates = ctx.taskCandidates ?? [];
   const selection = selectTask({
     ownerUserId: ctx.userId,
-    scope: { channel: ctx.channel ?? 'telegram', chatId: ctx.chatId },
+    scope: {
+      channel: ctx.channel ?? 'telegram',
+      chatId: ctx.chatId,
+      ...(ctx.threadId ? { threadId: ctx.threadId } : {}),
+    },
     tasks: candidates,
     intent: args.route,
     ...(ctx.taskAnchorId ? { anchorTaskId: ctx.taskAnchorId } : {}),
@@ -181,7 +190,11 @@ async function applyProposal(p: {
   validateProposal({ task: selected, args, patch, ctx, text: p.text });
   const access = {
     userId: ctx.userId,
-    scope: { channel: ctx.channel ?? 'telegram', chatId: ctx.chatId },
+    scope: {
+      channel: ctx.channel ?? 'telegram',
+      chatId: ctx.chatId,
+      ...(ctx.threadId ? { threadId: ctx.threadId } : {}),
+    },
   };
   const turnInput: Parameters<AgentDeps['repos']['tasks']['planTurn']>[0] = {
     access,
@@ -267,6 +280,7 @@ async function runProposal(p: {
       task.ownerUserId === ctx.userId &&
       task.scope.channel === (ctx.channel ?? 'telegram') &&
       task.scope.chatId === ctx.chatId &&
+      (task.scope.threadId ?? '') === (ctx.threadId ?? '') &&
       !['completed', 'cancelled', 'expired'].includes(task.status),
   );
   if (

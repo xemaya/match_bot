@@ -12,3 +12,5 @@ export * from './execution.js';
 export * from './task-delivery.js';
 export * from './approval-preview.js';
 export * from './task-search-terms.js';
+
+export * from './channel.js';

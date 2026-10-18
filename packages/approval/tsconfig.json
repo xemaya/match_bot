@@ -18,9 +18,6 @@
     },
     {
       "path": "../queue"
-    },
-    {
-      "path": "../channel-telegram"
     }
   ]
 }

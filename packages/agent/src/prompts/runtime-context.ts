@@ -15,6 +15,7 @@ function owns(ctx: MatchContext, task: NonNullable<MatchContext['task']>): boole
   return (
     task.ownerUserId === ctx.userId &&
     task.scope.chatId === ctx.chatId &&
+    (task.scope.threadId ?? '') === (ctx.threadId ?? '') &&
     task.scope.channel === (ctx.channel ?? 'telegram')
   );
 }

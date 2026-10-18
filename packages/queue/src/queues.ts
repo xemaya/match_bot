@@ -1,3 +1,5 @@
+import { inboundEventKey } from '@matchbot/domain';
+import { hashText } from '@matchbot/shared';
 import type { InboundMessage } from '@matchbot/domain';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
@@ -47,7 +49,9 @@ export async function enqueueInbound(
 ): Promise<void> {
   if (q.connection.status !== 'ready') throw new Error('queue producer unavailable');
   const data = inboundJobSchema.parse(msg);
-  const key = inboundJobId(data.channel, data.chatId, data.messageId);
+  const key = data.account
+    ? hashText(inboundEventKey(data))
+    : inboundJobId(data.channel, data.chatId, data.messageId);
   const existing = await q.inbound.getJob(key);
   if (existing) {
     const state = await existing.getState();

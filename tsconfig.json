@@ -42,6 +42,21 @@
     },
     {
       "path": "apps/worker"
+    },
+    {
+      "path": "packages/runtime"
+    },
+    {
+      "path": "packages/channels"
+    },
+    {
+      "path": "packages/channel-feishu"
+    },
+    {
+      "path": "packages/host"
+    },
+    {
+      "path": "packages/dsh-matchbot"
     }
   ]
 }

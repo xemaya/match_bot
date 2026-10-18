@@ -401,3 +401,9 @@ Env 增加 `JEV_POLICY: 'strict' | 'targeted'`，默认 strict。targeted 的直
 P37 提示词契约：agent 0.24.0 的规则/SOUL/场景/阶段协议与运行时数据分离。createMatchAgent 可接收运行上下文用于场景工具裁剪；无构造上下文的 SDK 调用者也经 isEnabled 控制。每次模型调用通过 SDK callModelInputFilter 添加 user-role JSON 数据包，不把用户/来源正文拼进系统指令，不把该包写入用户 session；工具、审批、JEV、出站路径和个人数据保留策略不变。模型调用前校验实际工具集合及提示词引用，trace metadata 增加 promptArchitecture/promptStage/promptScene。旧待审快照按既有 AGENT_VERSION 检查拒绝跨版本恢复。
 
 P39生成配置契约：既有DEEPSEEK_API_KEY/BASE_URL/MODEL仍定义兼容生成provider，新增可选GENERATION_REASONING_EFFORT由agent与演员生成传给SDK。DeepSeek原始搜索使用独立DEEPSEEK_SEARCH_API_KEY；仅当生成host是api.deepseek.com时兼容复用原key，其他生成host缺搜索专用key则worker启动报错，禁止跨provider泄露凭据。生成trace带model，新模型未知价格写costEstimateAvailable=false和占位costMicro=0，不解释成免费或沿用DeepSeek价格。无表、通道或个人数据字段改变。
+
+## P40 渠道与 DSH 宿主契约（实施中）
+
+渠道只负责平台协议、身份与呈现；公共运行层管理 inbox/outbox、账号路由与投递回执；业务插件继续通过既有出站门控写 outbox。新增字段须兼容现有 Telegram legacy scope，显式账号不得回退到 legacy。平台 ID 保留字符串；私聊用 conversationType 判定，不比较 chatId/userId。入站去重与会话键必须含安装实例、账号、租户及必要话题/所有者。
+
+首版 DSH 插件只装配现有 MatchbotRuntime，不把相同入站同时提交 DSH 默认 agent-loop。平台 sender 不暴露给模型；回复目标由服务端冻结。详细拟定接口见 docs/design/channels-dsh.md。

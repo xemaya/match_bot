@@ -9,3 +9,4 @@ export {
   type ApprovalCard,
   type Decision,
 } from './ops-card.js';
+export * from './connection.js';

@@ -1,3 +1,4 @@
+import { persistedChannelRoute } from '@matchbot/domain';
 import { randomUUID } from 'node:crypto';
 import { executionLeaseSchema, type ExecutionLease } from '@matchbot/domain';
 import { z } from 'zod';
@@ -176,11 +177,14 @@ export function approvalsRepo(prisma: PrismaClient) {
           message.receivedAt.getTime() < now.getTime() - 30 * 86400e3 ||
           (message.group
             ? !message.group.isActive || message.group.externalId !== rs.chatId
-            : user.externalId !== rs.chatId) ||
+            : (persistedChannelRoute(message.channelRoute)?.chatId ?? user.externalId) !==
+              rs.chatId) ||
           (message.taskId !== null &&
             (!message.task ||
               message.task.userId !== user.id ||
               message.task.chatId !== rs.chatId ||
+              message.task.threadId !==
+                (persistedChannelRoute(message.channelRoute)?.threadId ?? '') ||
               message.task.channel !== user.channel ||
               message.task.requirementsVersion !== message.taskRequirementsVersion ||
               ['completed', 'cancelled', 'expired'].includes(message.task.status)));

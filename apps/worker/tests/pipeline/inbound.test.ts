@@ -1,4 +1,4 @@
-import type { InboundMessage } from '@matchbot/domain';
+import { channelRouteSchema, type InboundMessage } from '@matchbot/domain';
 import { DEFAULT_THRESHOLDS } from '@matchbot/gating';
 import { describe, expect, it, vi } from 'vitest';
 import { processInbound } from '../../src/pipeline/inbound.js';
@@ -52,6 +52,7 @@ function makeDeps(over: Record<string, unknown> = {}) {
     userId: admitted.userId,
     groupId: admitted.groupId,
     externalId: admitted.message.messageId,
+    channelRoute: admitted.message.account ? channelRouteSchema.parse(admitted.message) : null,
     text: admitted.message.text,
     lang: admitted.message.lang ?? null,
     receivedAt: new Date(admitted.message.receivedAt),
@@ -83,7 +84,7 @@ function makeDeps(over: Record<string, unknown> = {}) {
     finish: vi.fn(() => Promise.resolve(true)),
   };
   const repos = { traces, users, groups, messages, demands, runStates, executions };
-  Object.assign(repos, { forExecution: () => repos });
+  Object.assign(repos, { forExecution: () => repos, forChannel: () => repos });
   const evaluateInbound = vi.fn(() => Promise.resolve(verdict));
   const runInbound = vi.fn(() =>
     Promise.resolve({ kind: 'completed', toolsCalled: ['upsert_demand', 'reply_in_group'] }),
@@ -392,4 +393,38 @@ describe('targeted Jev admission', () => {
     expect(r.evaluateInbound).toHaveBeenCalledOnce();
     expect(r.runInbound).not.toHaveBeenCalled();
   });
+});
+
+it('keeps JEV recent text inside the same account/chat/thread binding', async () => {
+  const t = makeDeps();
+  const account = { installationId: 'local', accountId: 'app', tenantId: 'tenant' };
+  const message = {
+    ...msg,
+    channel: 'feishu' as const,
+    account,
+    chatId: 'oc_chat',
+    userId: 'ou_user',
+    conversationType: 'group' as const,
+    threadId: 'omt_one',
+  };
+  const route = channelRouteSchema.parse(message);
+  t.repos.messages.recentByUser.mockResolvedValueOnce([
+    { id: 'a', groupId: 'g1', text: 'same thread', channelRoute: route },
+    {
+      id: 'b',
+      groupId: 'g1',
+      text: 'other thread',
+      channelRoute: { ...route, threadId: 'omt_two' },
+    },
+    {
+      id: 'c',
+      groupId: 'g1',
+      text: 'other account',
+      channelRoute: { ...route, account: { ...account, accountId: 'other' } },
+    },
+    { id: 'd', groupId: 'g1', text: 'legacy history', channelRoute: null },
+  ] as never);
+  await processInbound(t.deps as never, message);
+  const call = t.evaluateInbound.mock.calls[0] as unknown as [unknown, { recentTexts: string[] }];
+  expect(call[1].recentTexts).toEqual(['same thread']);
 });

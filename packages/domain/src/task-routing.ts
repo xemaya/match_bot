@@ -22,6 +22,7 @@ export function selectTask(input: z.input<typeof selectionSchema>): TaskSelectio
       task.ownerUserId === p.ownerUserId &&
       task.scope.channel === p.scope.channel &&
       task.scope.chatId === p.scope.chatId &&
+      (task.scope.threadId ?? '') === (p.scope.threadId ?? '') &&
       !['completed', 'cancelled', 'expired'].includes(task.status),
   );
   const candidateIds = available.map((task) => task.id);

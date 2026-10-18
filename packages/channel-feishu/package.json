@@ -1,0 +1,27 @@
+{
+  "name": "@matchbot/channel-feishu",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Feishu channel adapter",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "test": "vitest run --root ../.. --dir packages/channel-feishu"
+  },
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.76.0",
+    "@matchbot/db": "workspace:*",
+    "@matchbot/domain": "workspace:*",
+    "@matchbot/shared": "workspace:*",
+    "zod": "^4.6.5"
+  }
+}

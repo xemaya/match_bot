@@ -1,3 +1,4 @@
+import { ChannelSendError, type DeliveryResult } from '@matchbot/domain';
 import type { OutboundMessage } from '@matchbot/db';
 import type { Logger } from '@matchbot/shared';
 import { Api, GrammyError, type Bot } from 'grammy';
@@ -8,12 +9,9 @@ import { approvalKeyboard } from './ops-card.js';
 
 type ReactionEmoji = ReactionTypeEmoji['emoji'];
 
-export class TelegramSendError extends Error {
-  readonly deliveryState: 'not_sent' | 'unknown';
-  readonly errorCode: string;
-  readonly retryAfterSeconds: number | null;
+export class TelegramSendError extends ChannelSendError {
   constructor(
-    readonly outboundMessageId: string,
+    outboundMessageId: string,
     cause: unknown,
     info?: {
       deliveryState: 'not_sent' | 'unknown';
@@ -21,8 +19,6 @@ export class TelegramSendError extends Error {
       retryAfterSeconds?: number | null;
     },
   ) {
-    super(`telegram send failed for ${outboundMessageId}`, { cause });
-    this.name = 'TelegramSendError';
     const parsed =
       cause instanceof GrammyError
         ? z
@@ -36,14 +32,17 @@ export class TelegramSendError extends Error {
         : null;
     const definitive =
       parsed?.success && [400, 401, 403, 404, 429].includes(parsed.data.error_code);
-    this.deliveryState = info?.deliveryState ?? (definitive ? 'not_sent' : 'unknown');
-    this.errorCode =
-      info?.errorCode ?? (parsed?.success ? 'telegram_' + parsed.data.error_code : 'network_error');
-    this.retryAfterSeconds =
+    super(
+      outboundMessageId,
+      cause,
+      info?.deliveryState ?? (definitive ? 'not_sent' : 'unknown'),
+      info?.errorCode ?? (parsed?.success ? 'telegram_' + parsed.data.error_code : 'network_error'),
       info?.retryAfterSeconds ??
-      (parsed?.success && parsed.data.error_code === 429
-        ? Math.max(1, parsed.data.parameters?.retry_after ?? 1)
-        : null);
+        (parsed?.success && parsed.data.error_code === 429
+          ? Math.max(1, parsed.data.parameters?.retry_after ?? 1)
+          : null),
+    );
+    this.name = 'TelegramSendError';
   }
 }
 
@@ -71,10 +70,7 @@ export function withMention(
   };
 }
 
-export type TelegramDeliveryResult =
-  | { kind: 'message'; externalMessageId: string }
-  | { kind: 'reaction'; externalMessageId: null }
-  | { kind: 'not_started' };
+export type TelegramDeliveryResult = DeliveryResult;
 const sentMessage = z.object({
   message_id: z.number().int().positive().safe(),
   chat: z.object({ id: z.number().int().safe() }),
@@ -87,7 +83,7 @@ const memberSchema = z.object({
     username: z.string().optional(),
   }),
 });
-export function createTelegramSender(p: { bot: Bot; logger: Logger }) {
+export function createTelegramSender(p: { bot: Bot; logger: Logger; accountScope?: string }) {
   // Node grammY uses its own AbortSignal type; its supported client timeout avoids unsafe signal casts.
   if (p.bot.api instanceof Api)
     z.number()
@@ -117,6 +113,14 @@ export function createTelegramSender(p: { bot: Bot; logger: Logger }) {
       m: OutboundMessage,
       options: { beforeSend: () => Promise<boolean> },
     ): Promise<TelegramDeliveryResult> {
+      if (
+        m.channel !== 'telegram' ||
+        (p.accountScope !== undefined && m.senderAccountId !== p.accountScope)
+      )
+        throw new TelegramSendError(m.id, null, {
+          deliveryState: 'not_sent',
+          errorCode: 'route_mismatch',
+        });
       const chatId = Number(m.target);
       let externalStarted = false;
       try {
