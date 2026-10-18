@@ -44,7 +44,7 @@ import { marketEnrichTool } from './tools/market-enrich.js';
 import { replyWithMarketResultsTool } from './tools/reply-with-market-results.js';
 
 /** 改 instructions 或任何工具描述时递增（AGENTS.md §8 第 4 条）；升级 SDK 时清空待审 run_states。 */
-export const AGENT_VERSION = '0.26.0';
+export const AGENT_VERSION = '0.26.1';
 
 /** 「下周六」要换算成 whenAt，模型需要知道今天是哪天、星期几（伦敦时区）。 */
 export function londonToday(now = new Date()): string {
@@ -169,6 +169,9 @@ export function createMatchAgent(
     // P14 实测：默认 high 思考让多源综合超时；Jev 判断、Flash 生成，证据仍由代码校验。
     resetToolChoice: !(run?.taskPlanningOnly || run?.finalAnswerOnly || run?.requestStatusOnly),
     modelSettings: {
+      ...(deps.env.GENERATION_REASONING_EFFORT
+        ? { reasoning: { effort: deps.env.GENERATION_REASONING_EFFORT } }
+        : {}),
       ...(deps.env.DEEPSEEK_MODEL === 'deepseek-flash'
         ? { providerData: { thinking: { type: 'disabled' } } }
         : {}),
@@ -302,6 +305,7 @@ export function createMatchAgent(
     ...(run
       ? {
           traceMetadata: {
+            model: deps.env.DEEPSEEK_MODEL,
             phase: String(run.phase),
             promptArchitecture: '1',
             promptStage: run.taskPlanningOnly

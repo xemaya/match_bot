@@ -62,7 +62,13 @@ export async function generateSimulatedUserTurn(
   const agent = new Agent({
     name: 'simulatedGroupMember',
     model: deps.env.DEEPSEEK_MODEL,
-    modelSettings: { temperature: 0, maxTokens: 400 },
+    modelSettings: {
+      ...(deps.env.DEEPSEEK_MODEL === 'deepseek-flash' ? { temperature: 0 } : {}),
+      maxTokens: 400,
+      ...(deps.env.GENERATION_REASONING_EFFORT
+        ? { reasoning: { effort: deps.env.GENERATION_REASONING_EFFORT } }
+        : {}),
+    },
     toolUseBehavior: 'stop_on_first_tool',
     tools: [submit],
     instructions: [
@@ -74,7 +80,7 @@ export async function generateSimulatedUserTurn(
   });
   const runner = new Runner({
     traceIncludeSensitiveData: false,
-    traceMetadata: { phase: String(p.phase), inputRef: p.inputRef },
+    traceMetadata: { phase: String(p.phase), inputRef: p.inputRef, model: deps.env.DEEPSEEK_MODEL },
     ...(deps.modelProvider ? { modelProvider: deps.modelProvider } : {}),
   });
   await runner.run(agent, JSON.stringify(p.history), {

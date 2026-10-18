@@ -25,6 +25,13 @@ export type ApprovalCards = PipelineDeps['cards'];
  */
 export function buildDeps(p: { env?: Env; cards?: ApprovalCards } = {}): WorkerDeps {
   const env = p.env ?? loadEnv();
+  const informationSearchKey =
+    env.DEEPSEEK_SEARCH_API_KEY ??
+    (new URL(env.DEEPSEEK_BASE_URL).hostname === 'api.deepseek.com'
+      ? env.DEEPSEEK_API_KEY
+      : undefined);
+  if (env.INFORMATION_SEARCH_PROVIDER === 'deepseek' && !informationSearchKey)
+    throw new Error('DEEPSEEK_SEARCH_API_KEY is required when generation uses another provider');
   const logger = createLogger('worker', env.LOG_LEVEL);
   const repos = createRepositories(getPrisma(env.DATABASE_URL));
   configureModelProvider(env, [createTraceProcessor({ traces: repos.traces, logger })]);
@@ -57,7 +64,7 @@ export function buildDeps(p: { env?: Env; cards?: ApprovalCards } = {}): WorkerD
     ...(env.INFORMATION_SEARCH_PROVIDER === 'deepseek'
       ? {
           webSearch: createDeepSeekSearch({
-            apiKey: env.DEEPSEEK_API_KEY,
+            apiKey: informationSearchKey!,
             logger,
             ...(env.SEARCH_API_KEY
               ? { businessSearch: createWebSearch({ apiKey: env.SEARCH_API_KEY, logger }) }

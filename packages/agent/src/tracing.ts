@@ -43,9 +43,13 @@ export function createTraceProcessor(p: {
       const usage = data.usage ?? {};
       const inputTokens = usage.input_tokens ?? 0;
       const outputTokens = usage.output_tokens ?? 0;
-      const costMicro = Math.round(
-        inputTokens * PRICE_IN_MICRO_PER_TOKEN + outputTokens * PRICE_OUT_MICRO_PER_TOKEN,
-      );
+      const model: unknown = span.traceMetadata?.['model'];
+      const hasPrice = model === undefined || model === 'deepseek-flash';
+      const costMicro = hasPrice
+        ? Math.round(
+            inputTokens * PRICE_IN_MICRO_PER_TOKEN + outputTokens * PRICE_OUT_MICRO_PER_TOKEN,
+          )
+        : 0;
       const latencyMs =
         span.startedAt && span.endedAt
           ? Math.max(0, Date.parse(span.endedAt) - Date.parse(span.startedAt))
@@ -60,6 +64,7 @@ export function createTraceProcessor(p: {
           agentName: data.agent_name ?? null,
           inputTokens,
           outputTokens,
+          ...(typeof model === 'string' ? { model, costEstimateAvailable: hasPrice } : {}),
           ...(typeof inputRef === 'string'
             ? { sdkTraceRef: `${span.traceId}/${span.spanId}` }
             : {}),

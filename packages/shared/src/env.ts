@@ -40,6 +40,11 @@ export const envSchema = z
     DEEPSEEK_API_KEY: z.string().min(1),
     DEEPSEEK_BASE_URL: z.string().url().default('https://api.deepseek.com'),
     DEEPSEEK_MODEL: z.string().default('deepseek-flash'),
+    // Generation can use another compatible provider; its credential must never go to DeepSeek search.
+    DEEPSEEK_SEARCH_API_KEY: z.string().min(1).optional(),
+    GENERATION_REASONING_EFFORT: z
+      .enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
+      .optional(),
     JEV_POLICY: z.enum(['strict', 'targeted']).default('strict'),
     JEV_API_KEY: z.string().default(''),
     // Jev 经 OpenRouter 的 decisions 端点；客户端拼 `${JEV_BASE_URL}/decisions`（PoC V4 结论，

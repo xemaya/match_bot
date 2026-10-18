@@ -53,6 +53,10 @@ d.logger.info(
   {
     phase: d.env.DEFAULT_PHASE,
     agentVersion: AGENT_VERSION,
+    generationModel: d.env.DEEPSEEK_MODEL,
+    generationProviderHost: new URL(d.env.DEEPSEEK_BASE_URL).host,
+    generationReasoningEffort: d.env.GENERATION_REASONING_EFFORT ?? null,
+    jevPolicy: d.env.JEV_POLICY,
     informationSearchProvider: d.env.INFORMATION_SEARCH_PROVIDER,
     taskRequests: d.taskRequests === true,
   },

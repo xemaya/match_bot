@@ -43,6 +43,7 @@ const input = {
 describe('simulated user', () => {
   it('generates a proposal with a stub provider and no outbound tool', async () => {
     const d = deps();
+    Object.assign(d.env, { DEEPSEEK_MODEL: 'gpt-6.1-sol', GENERATION_REASONING_EFFORT: 'low' });
     const model = new ScriptedModel([
       [
         functionCall(
@@ -63,6 +64,7 @@ describe('simulated user', () => {
       },
     );
     expect(result.text).toContain('半小时');
+    expect(model.calls[0]?.request.modelSettings.reasoning).toEqual({ effort: 'low' });
     expect(d.repos.outbound.create).not.toHaveBeenCalled();
   });
   it('binds actor speech to the actual synthetic goal and participant role for Jev', async () => {

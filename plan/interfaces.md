@@ -399,3 +399,5 @@ P35引用契约：reply_to_request最多6个独立来源/offer、最多24个原�
 Env 增加 `JEV_POLICY: 'strict' | 'targeted'`，默认 strict。targeted 的直接对话进入现有任务规划，不伪造 Jev 分数；固定、服务端验证的状态回复在 Phase 2 无需 Jev；自由文本事实审核和来源核验保持 fail-closed。无 key 的 Jev 返回 `not_configured` 并留痕，不发网络请求。本地 CLI 只允许命名的 loopback 测试库，并通过模拟 transport 复用出站回执路径。
 
 P37 提示词契约：agent 0.24.0 的规则/SOUL/场景/阶段协议与运行时数据分离。createMatchAgent 可接收运行上下文用于场景工具裁剪；无构造上下文的 SDK 调用者也经 isEnabled 控制。每次模型调用通过 SDK callModelInputFilter 添加 user-role JSON 数据包，不把用户/来源正文拼进系统指令，不把该包写入用户 session；工具、审批、JEV、出站路径和个人数据保留策略不变。模型调用前校验实际工具集合及提示词引用，trace metadata 增加 promptArchitecture/promptStage/promptScene。旧待审快照按既有 AGENT_VERSION 检查拒绝跨版本恢复。
+
+P39生成配置契约：既有DEEPSEEK_API_KEY/BASE_URL/MODEL仍定义兼容生成provider，新增可选GENERATION_REASONING_EFFORT由agent与演员生成传给SDK。DeepSeek原始搜索使用独立DEEPSEEK_SEARCH_API_KEY；仅当生成host是api.deepseek.com时兼容复用原key，其他生成host缺搜索专用key则worker启动报错，禁止跨provider泄露凭据。生成trace带model，新模型未知价格写costEstimateAvailable=false和占位costMicro=0，不解释成免费或沿用DeepSeek价格。无表、通道或个人数据字段改变。

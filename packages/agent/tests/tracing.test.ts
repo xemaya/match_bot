@@ -26,6 +26,24 @@ function turnSpan(over: Record<string, unknown> = {}) {
 }
 
 describe('createTraceProcessor', () => {
+  it('attributes non-DeepSeek usage without applying the DeepSeek price estimate', async () => {
+    const d = deps(),
+      proc = createTraceProcessor(d as never);
+    await proc.onSpanEnd(
+      turnSpan({ traceMetadata: { phase: '2', model: 'gpt-6.1-sol', inputRef: 'new-provider' } }),
+    );
+    expect(d.traces.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        costMicro: 0,
+        output: expect.objectContaining({
+          model: 'gpt-6.1-sol',
+          costEstimateAvailable: false,
+          inputTokens: 1000,
+          outputTokens: 200,
+        }) as unknown,
+      }),
+    );
+  });
   it('links task model calls to the input without retaining model text', async () => {
     const d = deps();
     const proc = createTraceProcessor(d as never);

@@ -11,6 +11,18 @@ const base = {
 };
 
 describe('loadEnv', () => {
+  it('separates optional information search credentials and validates generation reasoning effort', () => {
+    const env = loadEnv({
+      ...base,
+      DEEPSEEK_SEARCH_API_KEY: 'search-only',
+      GENERATION_REASONING_EFFORT: 'low',
+    });
+    expect(env.DEEPSEEK_SEARCH_API_KEY).toBe('search-only');
+    expect(env.GENERATION_REASONING_EFFORT).toBe('low');
+    expect(loadEnv(base).GENERATION_REASONING_EFFORT).toBeUndefined();
+    expect(() => loadEnv({ ...base, GENERATION_REASONING_EFFORT: 'fast' })).toThrow();
+    expect(() => loadEnv({ ...base, DEEPSEEK_SEARCH_API_KEY: '' })).toThrow();
+  });
   it('keeps actor admission empty unless a strict group/id allowlist is configured', () => {
     expect(loadEnv(base).TELEGRAM_ACTOR_ALLOWLIST).toEqual([]);
     const actorAllowlist = [{ chatId: '-123', botIds: ['456'] }];
