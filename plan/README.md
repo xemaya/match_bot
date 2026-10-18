@@ -1,4 +1,4 @@
-P38：Agent 执行链审查与修复已完成本地回归，评审中，见 [P38-agent-runtime-fixes.md](P38-agent-runtime-fixes.md)。
+P38：Agent执行链及提示词整合已通过PR #15合并主干48ebd3e。P39新生成模型接入和真实Telegram回归完成，6条均送达，但任务推进质量未通过，见[回归报告](../docs/evaluations/2026-10-18-gpt-telegram-regression.md)。
 
 # 开发实施计划与进度看板
 
@@ -61,7 +61,7 @@ P36：Jev targeted 策略与本地无 Telegram 对话验证，Codex 本地实现
 | P34 | 搜索接入与校验阻塞修复 | [P34-search-and-validation-repair.md](./P34-search-and-validation-repair.md) | P33 | 8 | codex | 完成 | 0.21.1修复；原始搜索AB6组；真实回归3条，仍有失败 | 2026-10-18 |
 | P35 | 0.21.1真实多轮回归 | [P35-agent-regression-round-two.md](./P35-agent-regression-round-two.md) | P34 | 8 | codex | 完成 | 6条799779token；0.22.0引用计数修复；整体质量未通过 | 2026-10-18 |
 | P36 | Agent框架review与交付阶段 | [P36-agent-framework-review.md](./P36-agent-framework-review.md) | P35 | 8 | codex | 完成 | 0.23.0阶段交接/来源摘录/重复追问/时钟等价修复；1128测试；真实多轮未验收 | 2026-10-18 |
-| P39 | 新生成模型与Telegram回归 | [P39-model-provider-telegram-regression.md](./P39-model-provider-telegram-regression.md) | P38 | 8 | codex | 进行中 | PR15已合并；gpt-6.1-sol low；30万token/6演员消息 | 2026-10-18 |
+| P39 | 新生成模型与Telegram回归 | [P39-model-provider-telegram-regression.md](./P39-model-provider-telegram-regression.md) | P38 | 8 | codex | 完成 | 0.26.1/gpt-6.1-sol low；264118token；6条均回复，任务质量未通过 | 2026-10-18 |
 
 ## 波次与并行
 

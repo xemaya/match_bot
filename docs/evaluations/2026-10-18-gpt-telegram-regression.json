@@ -1,0 +1,104 @@
+{
+  "batchId": "502a366d-d527-43cc-b2d0-058cc3769fbb",
+  "sourceSha": "960373823fc4cdd4cb435145ce56ff84becbe0c7",
+  "agentVersion": "0.26.1",
+  "generationModel": "gpt-6.1-sol",
+  "reasoningEffort": "low",
+  "jevPolicy": "strict",
+  "approvedTokens": 300000,
+  "usedTokens": 264118,
+  "inputTokens": 259643,
+  "outputTokens": 4475,
+  "mainCalls": 34,
+  "actorGenerationCalls": 3,
+  "actorMessages": 6,
+  "mainReplies": 6,
+  "outboundDenials": 0,
+  "startedAtLocal": "2026-10-18T20:51:04.197000+08:00",
+  "lastReplyLocal": "2026-10-18T20:56:30.002000+08:00",
+  "cases": [
+    {
+      "case": "gp-registration",
+      "tokens": 97649,
+      "settled": true,
+      "turns": [
+        {
+          "text": "住E14怎么注册GP？我没有NHS number",
+          "sentReplies": 1,
+          "kinds": [
+            "recommendation"
+          ],
+          "queryCalls": 2,
+          "detailReads": 1,
+          "outboundDenials": 0
+        },
+        {
+          "text": "我也没有水电账单，想全程线上办，官方注册入口要从哪里进去？",
+          "sentReplies": 1,
+          "kinds": [
+            "recommendation"
+          ],
+          "queryCalls": 3,
+          "detailReads": 1,
+          "outboundDenials": 0
+        }
+      ]
+    },
+    {
+      "case": "printer",
+      "tokens": 52474,
+      "settled": true,
+      "turns": [
+        {
+          "text": "E14想收激光打印机，60镑以内",
+          "sentReplies": 1,
+          "kinds": [
+            "recommendation"
+          ],
+          "queryCalls": 1,
+          "detailReads": 1,
+          "outboundDenials": 0
+        },
+        {
+          "text": "打印机必须能无线打印，这台支持吗？",
+          "sentReplies": 1,
+          "kinds": [
+            "recommendation"
+          ],
+          "queryCalls": 0,
+          "detailReads": 2,
+          "outboundDenials": 0
+        }
+      ]
+    },
+    {
+      "case": "family-exhibition",
+      "tokens": 113995,
+      "settled": true,
+      "turns": [
+        {
+          "text": "2026年10月24日周六下午伦敦看展有什么推荐？预算20镑",
+          "sentReplies": 1,
+          "kinds": [
+            "recommendation"
+          ],
+          "queryCalls": 4,
+          "detailReads": 1,
+          "outboundDenials": 0
+        },
+        {
+          "text": "我是带一个5岁孩子，一大一小门票合计最多20镑。这个展当天能看、孩子该买哪档票，能再确认一下吗？",
+          "sentReplies": 1,
+          "kinds": [
+            "recommendation"
+          ],
+          "queryCalls": 4,
+          "detailReads": 1,
+          "outboundDenials": 0
+        }
+      ]
+    }
+  ],
+  "taskQualityAccepted": false,
+  "boundary": "Real Telegram/searches, existing synthetic actor task histories retained; no paired A/B, no real-user satisfaction proof, no billing price estimate."
+}
