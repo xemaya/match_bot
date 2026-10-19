@@ -1,4 +1,4 @@
-P42：网页核验与交付恢复已由[PR #19](https://github.com/xemaya/match_bot/pull/19)合并主干4d8dd1e，包含#18；P43真实Telegram回归进行中。浏览器与代码沙箱未实现，见[工作包](P42-web-research-recovery.md)。
+P42：网页核验与交付恢复已由[PR #19](https://github.com/xemaya/match_bot/pull/19)合并主干4d8dd1e，包含#18；P43真实回归完成，6条均送达、8读页6成功，仍有任务/校验缺口，见[报告](../docs/evaluations/2026-10-19-web-telegram-regression.md)。浏览器与代码沙箱未实现。
 
 P38：Agent执行链及提示词整合已通过PR #15合并主干48ebd3e。P39新生成模型接入和真实Telegram回归完成，6条均送达，但任务推进质量未通过，见[回归报告](../docs/evaluations/2026-10-18-gpt-telegram-regression.md)。
 
@@ -64,8 +64,8 @@ P36：Jev targeted 策略与本地无 Telegram 对话验证，Codex 本地实现
 | P35 | 0.21.1真实多轮回归 | [P35-agent-regression-round-two.md](./P35-agent-regression-round-two.md) | P34 | 8 | codex | 完成 | 6条799779token；0.22.0引用计数修复；整体质量未通过 | 2026-10-18 |
 | P36 | Agent框架review与交付阶段 | [P36-agent-framework-review.md](./P36-agent-framework-review.md) | P35 | 8 | codex | 完成 | 0.23.0阶段交接/来源摘录/重复追问/时钟等价修复；1128测试；真实多轮未验收 | 2026-10-18 |
 | P39 | 新生成模型与Telegram回归 | [P39-model-provider-telegram-regression.md](./P39-model-provider-telegram-regression.md) | P38 | 8 | codex | 完成 | 0.26.1/gpt-6.1-sol low；264118token；6条均回复，任务质量未通过 | 2026-10-18 |
-| P41 | 研究停止与交付证据覆盖 | [P41-research-delivery.md](./P41-research-delivery.md) | P39 | 8 | codex | 待合并 | 1196 测试通过；真实任务尚未复测 | 2026-10-18 |
-| P43 | 网页核验Telegram回归 | [P43-web-telegram-regression.md](./P43-web-telegram-regression.md) | P42 | 8 | codex | 进行中 | 0.29.0；本轮50万生成token/最多6条演员消息 | 2026-10-19 |
+| P41 | 研究停止与交付证据覆盖 | [P41-research-delivery.md](./P41-research-delivery.md) | P39 | 8 | codex | 完成 | 经PR19合并；真实回归见P43，不等于完整任务通过 | 2026-10-19 |
+| P43 | 网页核验Telegram回归 | [P43-web-telegram-regression.md](./P43-web-telegram-regression.md) | P42 | 8 | codex | 完成 | 0.29.0；401145token/6条均回复；8读页6成功，保留缺口 | 2026-10-19 |
 
 ## 波次与并行
 
