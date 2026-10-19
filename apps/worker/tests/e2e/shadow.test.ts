@@ -166,7 +166,7 @@ describe('shadow e2e (Phase 0)', () => {
     // 终点：Phase 0 只写 dry_run，不产生任何待发消息（AGENTS.md §3.3 第 4 条）
     const out = await prisma.outboundMessage.findMany({ where: { target: CHAT } });
     expect(out.map((o) => o.status)).toEqual(['dry_run']);
-    expect(out[0]?.text).toContain('not part of the transaction');
+    expect(out[0]?.text).toBe('Here are two van options');
     expect(await prisma.outboundMessage.count({ where: { target: CHAT, status: 'pending' } })).toBe(
       0,
     );

@@ -3,7 +3,7 @@ import { DEFAULT_THRESHOLDS } from '@matchbot/gating';
 import { describe, expect, it, vi } from 'vitest';
 import {
   decideForOutbound,
-  disclaimerFor,
+  formatOutboundText,
   executeOutbound,
 } from '../../src/tools/outbound-gate.js';
 
@@ -156,19 +156,14 @@ describe('decideForOutbound', () => {
 });
 
 describe('executeOutbound', () => {
-  it('writes dry_run row in phase 0 and pending row otherwise, with disclaimer appended', async () => {
+  it('writes dry_run row in phase 0 and pending row otherwise, without changing the reviewed wording', async () => {
     const d = deps();
-    await executeOutbound(
-      d as never,
-      ctx(0),
-      { ...draft, toolCallId: 'c1', disclaimer: 'catalogue' as const },
-      'dry_run',
-    );
+    await executeOutbound(d as never, ctx(0), { ...draft, toolCallId: 'c1' }, 'dry_run');
     await executeOutbound(d as never, ctx(2), { ...draft, toolCallId: 'c2' }, 'auto');
     const create = d.repos.outbound.create;
     const first = create.mock.calls[0] as unknown[];
     const firstDraft = first[0] as { text: string; toolCallId: string };
-    expect(firstDraft.text).toContain('not part of the transaction');
+    expect(firstDraft.text).toBe(draft.text);
     expect(firstDraft.toolCallId).toBe('c1');
     expect(first[1]).toBe('dry_run');
     expect(create).toHaveBeenNthCalledWith(2, expect.anything(), 'pending');
@@ -184,19 +179,6 @@ describe('executeOutbound', () => {
     const [row] = d.repos.outbound.create.mock.calls[0] as unknown as [{ text: string }];
     expect(row.text).toBe('请问您大概什么时候搬？');
   });
-  it('localises the disclaimer to a Chinese reply', async () => {
-    const d = deps();
-    await executeOutbound(
-      d as never,
-      ctx(0),
-      { ...draft, text: '这几个 van 可以参考', disclaimer: 'catalogue' as const },
-      'dry_run',
-    );
-    const [row] = d.repos.outbound.create.mock.calls[0] as unknown as [{ text: string }];
-    expect(row.text).toBe(
-      '这几个 van 可以参考\n\n价格和档期直接找商家确认就好，我只是帮忙牵个线，不经手交易。',
-    );
-  });
   it('drop writes nothing', async () => {
     const d = deps();
     const r = await executeOutbound(d as never, ctx(2), draft, 'drop');
@@ -205,30 +187,14 @@ describe('executeOutbound', () => {
   });
 });
 
-describe('disclaimerFor', () => {
-  it('prefers the language recorded on the demand', () => {
-    expect(disclaimerFor('uk', 'text')).toContain('в угоді не беру участі');
-    expect(disclaimerFor('pt', 'text')).toContain('não faço parte da transação');
-  });
-  it('detects Chinese from the text when the demand has no language', () => {
-    expect(disclaimerFor(undefined, '周六有人有 van 吗')).toContain('不经手交易');
-  });
-  it('falls back to English rather than guessing Russian vs Ukrainian from Cyrillic', () => {
-    expect(disclaimerFor(undefined, 'Потрібен фургон')).toContain('not part of the transaction');
-  });
-  it('falls back to English for a language it has no text for', () => {
-    expect(disclaimerFor('fr', 'bonjour')).toContain('not part of the transaction');
-  });
-});
-
-describe('disclaimer voice', () => {
-  it('speaks as one group member, not as a company', () => {
-    for (const lang of ['zh', 'en'] as const) {
-      for (const kind of ['catalogue', 'web'] as const) {
-        const d = disclaimerFor(lang, '', kind);
-        expect(d).not.toMatch(/我们|\bwe\b/i);
-      }
-    }
+describe('outbound voice', () => {
+  it.each([
+    '这台价格合适，但帖子没写型号，还不能确定支持 Wi-Fi。\n来源：A2H详情 · 小红书原帖',
+    'The model is missing, so Wi-Fi support is still unknown. https://example.com/original',
+    'Модель не вказана. https://example.com/original',
+    'Modelo não informado. https://example.com/original',
+  ])('preserves specific uncertainty and source links without a generic footer: %s', (text) => {
+    expect(formatOutboundText(ctx(0), { ...draft, text })).toBe(text);
   });
 });
 

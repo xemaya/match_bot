@@ -150,9 +150,8 @@ export function makeOutboundTool<A>(
       delete ctx.outboundInputFailures;
       schemaFeedback.delete(ctx);
       const preview = callId ? ctx.outboundPreviews?.[callId] : undefined;
-      const { disclaimer: _disclaimer, ...withoutDisclaimer } = d;
       const draft: OutboundDraftInput = {
-        ...(preview ? { ...withoutDisclaimer, text: preview } : d),
+        ...(preview ? { ...d, text: preview } : d),
         ...(details?.toolCall?.callId ? { toolCallId: details.toolCall.callId } : {}),
       };
       const result = await executeOutbound(

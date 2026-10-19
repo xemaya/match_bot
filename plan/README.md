@@ -1,3 +1,5 @@
+P44：人感与 ENFP 气质优化代码与检查完成，0.30.0；以 [PR #21](https://github.com/xemaya/match_bot/pull/21) 合并主干为生效点。1219项检查通过；无新增真实模型/Telegram测试，见 [记录](./P44-natural-enfp-voice.md)。
+
 P42：网页核验与交付恢复已由[PR #19](https://github.com/xemaya/match_bot/pull/19)合并主干4d8dd1e，包含#18；P43真实回归完成，6条均送达、8读页6成功，仍有任务/校验缺口，见[报告](../docs/evaluations/2026-10-19-web-telegram-regression.md)。浏览器与代码沙箱未实现。
 
 P38：Agent执行链及提示词整合已通过PR #15合并主干48ebd3e。P39新生成模型接入和真实Telegram回归完成，6条均送达，但任务推进质量未通过，见[回归报告](../docs/evaluations/2026-10-18-gpt-telegram-regression.md)。

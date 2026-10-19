@@ -112,7 +112,6 @@ export function replyWithLegacyXhsNotesTool(deps: AgentDeps) {
           }),
         ),
         inputRef: ctx.sourceMessageId,
-        disclaimer: 'xhs' as const,
         ...groupReplyAddressing(ctx),
       });
     },

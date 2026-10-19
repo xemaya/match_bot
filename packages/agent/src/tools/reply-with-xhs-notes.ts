@@ -87,7 +87,7 @@ export function replyWithXhsNotesTool(deps: AgentDeps) {
       }
       if ('error' in result) return Promise.resolve(result);
       const text = `${intro}\n\n${result.text}`;
-      // domain 的原始出站文本仍限 4000；为免责与 @ 留余量，不截断来源或丢弃事实。
+      // domain 的原始出站文本仍限 4000；为 @ 留余量，不截断来源或丢弃事实。
       if (text.length > 3700)
         return Promise.resolve({
           error: `invalid recommendation: reply too long (${text.length}/3700 raw characters including code-generated links); shorten descriptions or include fewer entities/sources, keeping practical facts and their evidence`,
@@ -100,7 +100,6 @@ export function replyWithXhsNotesTool(deps: AgentDeps) {
           JSON.stringify({ title: n.title, excerpt: n.desc, author: n.author, url: n.url }),
         ),
         inputRef: ctx.sourceMessageId,
-        disclaimer: 'xhs' as const,
         ...groupReplyAddressing(ctx),
       });
     },

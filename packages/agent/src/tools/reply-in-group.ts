@@ -9,7 +9,7 @@ export const replyInGroupParams = z.object({
     .min(1)
     .max(1500)
     .describe(
-      'Reply in the same language as the demand, like a helpful group member: 1-3 short sentences naming 2-3 suppliers inline with rough price and contact. No numbered list, no headings, no URLs. Do not add a disclaimer; one is appended automatically.',
+      'Reply in the same language as the demand, like a helpful group member: 1-3 short sentences naming 2-3 suppliers inline with rough price and contact. No numbered list, no headings, no URLs. Mention a concrete unknown only when it affects the choice; do not append a generic disclaimer.',
     ),
   supplierIds: z
     .array(z.string())
@@ -36,7 +36,6 @@ export function replyInGroupTool(deps: AgentDeps) {
         text: args.text,
         supplierSummaries: suppliers.map((s) => `${s.name} ${s.roughPrice ?? ''}`.trim()),
         inputRef: ctx.sourceMessageId,
-        disclaimer: 'catalogue',
         ...groupReplyAddressing(ctx),
       };
     },
