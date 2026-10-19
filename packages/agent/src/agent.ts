@@ -10,6 +10,7 @@ import { legacyInstructions } from './prompts/legacy-instructions.js';
 import { replyRequestStatusTool } from './tools/reply-request-status.js';
 import { replyToRequestTool } from './tools/reply-to-request.js';
 import { searchInformationTool } from './tools/search-information.js';
+import { readWebPageTool } from './tools/read-web-page.js';
 import { recordRequestTool } from './tools/record-request.js';
 import { requestInstructions } from './request-instructions.js';
 import { taskPlanningInstructions } from './task-instructions.js';
@@ -44,7 +45,7 @@ import { marketEnrichTool } from './tools/market-enrich.js';
 import { replyWithMarketResultsTool } from './tools/reply-with-market-results.js';
 
 /** 改 instructions 或任何工具描述时递增（AGENTS.md §8 第 4 条）；升级 SDK 时清空待审 run_states。 */
-export const AGENT_VERSION = '0.26.1';
+export const AGENT_VERSION = '0.29.0';
 
 /** 「下周六」要换算成 whenAt，模型需要知道今天是哪天、星期几（伦敦时区）。 */
 export function londonToday(now = new Date()): string {
@@ -212,6 +213,7 @@ export function createMatchAgent(
               ...(deps.taskRequests
                 ? [recordTaskProgressTool(deps), readTaskSourcesTool(deps)]
                 : []),
+              ...(deps.answerRequests && deps.pageReader ? [readWebPageTool(deps)] : []),
               findSuppliersTool(deps),
               findPeerSupplyTool(deps),
               askClarificationTool(deps),

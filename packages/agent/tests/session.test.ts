@@ -220,6 +220,7 @@ describe('archiving ephemeral search results on replay', () => {
     'web_search',
     'xhs_legacy_search',
     'search_information',
+    'read_web_page',
   ])('archives %s too', (name) => {
     const s = createPgSession({ repos: repos() as never, userId: 'u1' });
     const out = s.prepareHistoryItemForModelInput?.(big('c1', name)) as {

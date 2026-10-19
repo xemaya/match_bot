@@ -401,3 +401,8 @@ Env 增加 `JEV_POLICY: 'strict' | 'targeted'`，默认 strict。targeted 的直
 P37 提示词契约：agent 0.24.0 的规则/SOUL/场景/阶段协议与运行时数据分离。createMatchAgent 可接收运行上下文用于场景工具裁剪；无构造上下文的 SDK 调用者也经 isEnabled 控制。每次模型调用通过 SDK callModelInputFilter 添加 user-role JSON 数据包，不把用户/来源正文拼进系统指令，不把该包写入用户 session；工具、审批、JEV、出站路径和个人数据保留策略不变。模型调用前校验实际工具集合及提示词引用，trace metadata 增加 promptArchitecture/promptStage/promptScene。旧待审快照按既有 AGENT_VERSION 检查拒绝跨版本恢复。
 
 P39生成配置契约：既有DEEPSEEK_API_KEY/BASE_URL/MODEL仍定义兼容生成provider，新增可选GENERATION_REASONING_EFFORT由agent与演员生成传给SDK。DeepSeek原始搜索使用独立DEEPSEEK_SEARCH_API_KEY；仅当生成host是api.deepseek.com时兼容复用原key，其他生成host缺搜索专用key则worker启动报错，禁止跨provider泄露凭据。生成trace带model，新模型未知价格写costEstimateAvailable=false和占位costMicro=0，不解释成免费或沿用DeepSeek价格。无表、通道或个人数据字段改变。
+
+
+## P42 公共网页读取
+
+`websearch.PageReader` 接收 `{url, find?, offset?}`，返回 `ok` 的正文片段、页面地址/标题、导航链接、分页位置，或结构化 `unavailable`。`agent.AgentDeps.pageReader` 可选，由 worker 注入；缺失时不注册工具或引用其协议。仅当前任务已发现地址允许导航；网络层对每次重定向进行 DNS 公网校验并固定连接地址。快照保留读取预算和已发现链接。

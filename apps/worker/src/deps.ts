@@ -10,7 +10,12 @@ import { createRepositories, getPrisma } from '@matchbot/db';
 import { DEFAULT_THRESHOLDS } from '@matchbot/gating';
 import { createJevClient, evaluateInbound, evaluateOutbound } from '@matchbot/jev';
 import { createLogger, loadEnv, type Env } from '@matchbot/shared';
-import { createWebSearch, createXhsSearch, createMarketSearch } from '@matchbot/websearch';
+import {
+  createWebSearch,
+  createXhsSearch,
+  createMarketSearch,
+  createPageReader,
+} from '@matchbot/websearch';
 import type { PipelineDeps } from './pipeline/inbound.js';
 import type { ResumeDeps } from './pipeline/resume.js';
 
@@ -61,6 +66,7 @@ export function buildDeps(p: { env?: Env; cards?: ApprovalCards } = {}): WorkerD
     publishApproval,
     cards,
     marketSearch: createMarketSearch({ logger }),
+    pageReader: createPageReader({ dnsMode: env.PAGE_DNS_MODE }),
     ...(env.INFORMATION_SEARCH_PROVIDER === 'deepseek'
       ? {
           webSearch: createDeepSeekSearch({

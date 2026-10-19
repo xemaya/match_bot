@@ -10,6 +10,7 @@ export function executionToolNames(deps: AgentDeps, ctx: MatchContext): Set<stri
   const names = new Set(['reply_to_request', 'react', 'do_nothing', ...scene.tools]);
   if (scene.id !== 'unsupported') {
     if (deps.webSearch?.research) names.add('search_information');
+    if (deps.pageReader) names.add('read_web_page');
     if (deps.taskRequests) {
       names.add('record_task_progress');
       names.add('read_task_sources');
@@ -42,6 +43,7 @@ const PROTOCOL_TOOLS = [
   'find_peer_supply',
   'reply_in_group',
   'search_information',
+  'read_web_page',
   'market_search',
   'market_enrich',
   'xhs_search',

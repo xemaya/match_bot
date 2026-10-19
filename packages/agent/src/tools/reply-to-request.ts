@@ -1,3 +1,4 @@
+import { pendingResearchConditions, researchFollowupInstruction } from '../research-readiness.js';
 import { unsupportedNumericClaims } from '../numeric-evidence.js';
 import { z } from 'zod';
 import type { AgentDeps, MatchContext } from '../context.js';
@@ -214,6 +215,12 @@ export function replyToRequestTool(deps: AgentDeps) {
       'SENDS a useful, source-grounded reply to the current request: advice/steps, partial matches, local no-match explanation, ONE clarification or source unavailability. Complete the user goal even without a perfect offer. Use k refs from search_information for facts, m refs for valid A2H offers; write the useful explanation yourself; code supplies links. Keep explicit role/date/area/budget; never relax must-have constraints or contact people. This remains subject to phase/Jev/rate gates.',
     parameters,
     toDraft: async (ctx, args: z.infer<typeof parameters>) => {
+      if (
+        !ctx.isAnswerFinalization &&
+        args.kind !== 'clarification' &&
+        pendingResearchConditions(ctx).length
+      )
+        return { error: researchFollowupInstruction(ctx), kind: 'research_required' };
       // Task readiness governs delivery level, not permission to share useful partial facts.
       // Source checks, hard-condition conflict review and the outbound gate still run below.
       if (ctx.answerInputExhausted && ctx.isAnswerFinalization) {

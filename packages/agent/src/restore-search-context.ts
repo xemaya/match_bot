@@ -1,3 +1,4 @@
+import { INFORMATION_LIMITS } from './information-limits.js';
 import { currentRequestSchema } from './current-request.js';
 import { knowledgeSourceSchema } from './knowledge-evidence.js';
 import { demandDraftSchema } from '@matchbot/domain';
@@ -27,7 +28,16 @@ export const researchContextSchema = z.object({
   taskProgressVersion: z.number().int().nonnegative().optional(),
   deliverySourceRefs: z
     .array(z.string().regex(/^[km]\d+$/))
-    .max(6)
+    // Information delivery retains up to 16 pages; market delivery still permits at most six offers.
+    .max(INFORMATION_LIMITS.sources)
+    .refine((refs) => refs.filter((ref) => ref.startsWith('m')).length <= 6)
+    .optional(),
+  outboundInputFailures: z
+    .object({
+      tool: z.string(),
+      count: z.number().int().min(1).max(100),
+      feedback: z.array(z.string().max(1000)).max(3).optional(),
+    })
     .optional(),
   taskSourceReviewedClaims: z.number().int().nonnegative().max(96).optional(),
   sourceReviewCache: z.record(z.string(), z.boolean()).optional(),
@@ -42,8 +52,13 @@ export const researchContextSchema = z.object({
   quietSupplementTaskId: z.string().optional(),
   quietSupplementEvidenceIds: z.array(z.string()).max(128).optional(),
   replySuppressed: z.boolean().optional(),
-  knowledgeSources: z.array(knowledgeSourceSchema).max(16).optional(),
-  informationQueries: z.array(z.string()).max(4).optional(),
+  knowledgeSources: z.array(knowledgeSourceSchema).max(INFORMATION_LIMITS.sources).optional(),
+  informationQueries: z.array(z.string()).max(INFORMATION_LIMITS.queries).optional(),
+  pageReads: z.array(z.string().max(2400)).max(INFORMATION_LIMITS.pageReads).optional(),
+  pageLinks: z
+    .array(z.object({ text: z.string().max(160), url: z.string().url().max(2048) }))
+    .max(160)
+    .optional(),
   sourceFailures: z.array(z.string()).optional(),
   rateLimitPerDay: z.number().int().nonnegative().optional(),
   xhsNotes: z
@@ -96,6 +111,9 @@ export function restoreSearchContext(ctx: MatchContext, snapshot: string): Match
   if (
     raw['xhsNotes'] === undefined &&
     raw['marketListings'] === undefined &&
+    raw['knowledgeSources'] === undefined &&
+    raw['pageReads'] === undefined &&
+    raw['outboundInputFailures'] === undefined &&
     raw['outboundPreviews'] === undefined &&
     raw['currentRequest'] === undefined
   )
@@ -134,6 +152,17 @@ export function restoreSearchContext(ctx: MatchContext, snapshot: string): Match
     ...(saved.answerInputExhausted !== undefined
       ? { answerInputExhausted: saved.answerInputExhausted }
       : {}),
+    ...(saved.outboundInputFailures
+      ? {
+          outboundInputFailures: {
+            tool: saved.outboundInputFailures.tool,
+            count: saved.outboundInputFailures.count,
+            ...(saved.outboundInputFailures.feedback
+              ? { feedback: saved.outboundInputFailures.feedback }
+              : {}),
+          },
+        }
+      : {}),
     ...(saved.isAnswerFinalization !== undefined
       ? { isAnswerFinalization: saved.isAnswerFinalization }
       : {}),
@@ -142,6 +171,8 @@ export function restoreSearchContext(ctx: MatchContext, snapshot: string): Match
       : {}),
     ...(saved.knowledgeSources ? { knowledgeSources: saved.knowledgeSources } : {}),
     ...(saved.informationQueries ? { informationQueries: saved.informationQueries } : {}),
+    ...(saved.pageReads ? { pageReads: saved.pageReads } : {}),
+    ...(saved.pageLinks ? { pageLinks: saved.pageLinks } : {}),
     ...(saved.sourceFailures ? { sourceFailures: saved.sourceFailures } : {}),
     ...(saved.xhsNotes
       ? {

@@ -38,6 +38,7 @@ const EPHEMERAL_RESULT_TOOLS = new Set([
   'xhs_read_notes',
   'web_search',
   'search_information',
+  'read_web_page',
   'xhs_legacy_search',
 ]);
 

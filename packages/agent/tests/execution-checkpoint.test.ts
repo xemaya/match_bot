@@ -2,6 +2,8 @@ import { taskSchema } from '@matchbot/domain';
 import { assistantMessage, functionCall, ScriptedModel } from '@openai/agents/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { createMatchAgent } from '../src/agent.js';
+import { createKnowledgeSource } from '../src/knowledge-evidence.js';
+import { buildDeliveryPacket } from '../src/delivery-context.js';
 import {
   restoreExecutionCheckpoint,
   saveExecutionCheckpoint,
@@ -83,6 +85,37 @@ function fixture() {
   return { ctx, deps, saveCheckpoint, snapshot: () => snapshot };
 }
 describe('execution research checkpoints', () => {
+  it('saves the full delivery packet and retry feedback after a rejected draft', async () => {
+    const f = fixture();
+    delete f.ctx.marketPlan;
+    delete f.ctx.marketListings;
+    f.ctx.knowledgeSources = Array.from({ length: 16 }, (_, i) =>
+      createKnowledgeSource(
+        {
+          title: 'Official page',
+          url: `https://example.com/page-${i}`,
+          text: 'Official exhibition information and opening hours.',
+        },
+        i + 1,
+      ),
+    );
+    f.ctx.deliverySourceRefs = buildDeliveryPacket(f.ctx).refs;
+    expect(f.ctx.deliverySourceRefs).toHaveLength(16);
+    f.ctx.outboundInputFailures = {
+      tool: 'reply_to_request',
+      count: 1,
+      feedback: ['unsupported time'],
+    };
+    await saveExecutionCheckpoint(f.deps, f.ctx, '看展', 'version');
+    const fresh = { ...f.ctx };
+    delete fresh.outboundInputFailures;
+    delete fresh.deliverySourceRefs;
+    const restored = restoreExecutionCheckpoint(f.deps, fresh, '看展', f.snapshot(), 'version');
+    expect(restored.deliverySourceRefs).toHaveLength(16);
+    expect(restored.outboundInputFailures).toEqual(f.ctx.outboundInputFailures);
+    f.ctx.deliverySourceRefs.push('k17');
+    await expect(saveExecutionCheckpoint(f.deps, f.ctx, '看展', 'version')).rejects.toThrow();
+  });
   it('encrypts tool results and restores them without restoring an old execution token or deadline', async () => {
     const f = fixture();
     await saveExecutionCheckpoint(f.deps, f.ctx, '找书桌', 'version');

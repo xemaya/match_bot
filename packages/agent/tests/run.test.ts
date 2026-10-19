@@ -1566,6 +1566,47 @@ it('persists and resumes a phase 1 request-status approval through the SDK', asy
   expect(draft.text).toContain('查询没能完成');
 });
 
+it.each([false, true])(
+  'repairs unsupported final delivery numbers even after an early stop: %s',
+  async (stopsEarly) => {
+    const model = new ScriptedModel([
+      [functionCall('do_nothing', { reason: 'research done' }, { callId: 'research-done' })],
+      [assistantMessage('done')],
+      [
+        functionCall(
+          'reply_to_request',
+          { kind: 'partial', text: '展览开放到17:45。', refs: [] },
+          { callId: 'unsupported-time' },
+        ),
+      ],
+      ...(stopsEarly ? [[assistantMessage('Unable to answer')]] : []),
+      [
+        functionCall(
+          'reply_to_request',
+          {
+            kind: 'no_match',
+            text: '未核实当天开放时间和儿童票档，暂不能确认符合条件。',
+            refs: [],
+          },
+          { callId: 'corrected-time' },
+        ),
+      ],
+    ]);
+    const { deps, repos } = makeDeps(model);
+    await runInbound({
+      deps: { ...deps, answerRequests: true } as never,
+      ctx: ctx(0),
+      input: '周六下午带孩子看展，预算20镑',
+    });
+    expect(repos.outbound.create).toHaveBeenCalledOnce();
+    expect(repos.outbound.create).toHaveBeenCalledWith(
+      expect.objectContaining({ text: expect.stringContaining('未核实当天') as unknown }),
+      'dry_run',
+    );
+    model.assertComplete();
+  },
+);
+
 it('uses bounded finalization after the research turn budget instead of dropping collected work', async () => {
   const model = new ScriptedModel([
     ...Array.from({ length: 12 }, (_, i) => [
@@ -1608,4 +1649,128 @@ it.each(['react', 'do_nothing'])('ends acknowledgement immediately after %s', as
     input: '谢谢',
   });
   expect(model.calls).toHaveLength(1);
+});
+
+it('new wireless requirement cannot finish through a direct reply or a natural-language stop before fresh research', async () => {
+  const task = taskSchema.parse({
+    id: 'printer',
+    ownerUserId: 'u1',
+    scope: { channel: 'telegram', chatId: '-1' },
+    objective: '找激光打印机',
+    category: 'second_hand',
+    counterparty: 'supply',
+    status: 'active',
+    revision: 0,
+    goals: [
+      {
+        id: 'g',
+        title: '激光打印机',
+        required: true,
+        criteria: [
+          {
+            id: 'subject',
+            label: '激光打印机',
+            strength: 'hard',
+            status: 'unknown',
+            evidenceRefs: [],
+          },
+        ],
+      },
+    ],
+    constraints: [],
+    evidence: [],
+    pendingQuestion: null,
+    blockReason: null,
+    delivery: { status: 'none', level: 'none' },
+    userConfirmation: null,
+  });
+  const model = new ScriptedModel([
+    [
+      functionCall(
+        'update_task',
+        {
+          taskRef: 'printer',
+          referenceQuote: null,
+          goals: [],
+          constraints: [
+            {
+              key: 'feature',
+              goalId: null,
+              strength: 'hard',
+              value: { kind: 'text', text: '必须无线' },
+              sourceQuote: '必须无线',
+            },
+          ],
+          outcome: null,
+        },
+        { callId: 'plan-wifi' },
+      ),
+    ],
+    [
+      functionCall(
+        'reply_to_request',
+        { kind: 'no_match', text: '原帖没有写无线，暂时不能确认。', refs: [] },
+        { callId: 'premature' },
+      ),
+    ],
+    [assistantMessage('finished')],
+    [
+      functionCall(
+        'search_information',
+        { queries: [{ query: 'laser printer wireless London', domains: null }] },
+        { callId: 'fresh-search' },
+      ),
+    ],
+    [assistantMessage('research ended')],
+    [
+      functionCall(
+        'reply_to_request',
+        { kind: 'no_match', text: '这次补查仍没有找到能确认无线的结果。', refs: [] },
+        { callId: 'final' },
+      ),
+    ],
+  ]);
+  const { deps, repos } = makeDeps(model);
+  deps.evaluateOutbound.mockResolvedValue({
+    ok: true,
+    worthReplying: 3,
+    languageOk: 1,
+    mentionsUnverified: 0,
+  });
+  const research = vi.fn(() => {
+    expect(repos.outbound.create).not.toHaveBeenCalled();
+    return Promise.resolve({ status: 'ok', sources: [] });
+  });
+  const tasks = {
+    findOpenByScope: () => Promise.resolve([task]),
+    planTurn: (p: { patch: Parameters<typeof reviseTaskRequirements>[0]['patch'] }) =>
+      Promise.resolve({
+        kind: 'applied',
+        task: reviseTaskRequirements({
+          task,
+          patch: p.patch,
+          source: { messageId: 'm1', text: '打印机必须无线' },
+        }),
+      }),
+  };
+  await runInbound({
+    deps: {
+      ...deps,
+      repos: { ...repos, tasks },
+      answerRequests: true,
+      taskRequests: true,
+      webSearch: { research },
+    } as never,
+    ctx: { ...ctx(0), source: { messageId: 'tg1', userId: '42' } },
+    input: '打印机必须无线',
+  });
+  expect(research).toHaveBeenCalledOnce();
+  expect(repos.outbound.create).toHaveBeenCalledOnce();
+  expect(repos.outbound.create).toHaveBeenCalledWith(expect.anything(), 'dry_run');
+  expect(repos.traces.create).toHaveBeenCalledWith(
+    expect.objectContaining({
+      output: { gate: 'research_continuation', reason: 'new_hard_condition_unresearched' },
+    }),
+  );
+  model.assertComplete();
 });

@@ -64,6 +64,7 @@ export const envSchema = z
     // drop = 不发，无人值守时用；review = 送运营群审批，有人值守时用。
     // P34 网页信息研究默认DeepSeek；Tavily保留可回滚的信息研究和原有商家联系方式核验。
     INFORMATION_SEARCH_PROVIDER: z.enum(['deepseek', 'tavily']).default('deepseek'),
+    PAGE_DNS_MODE: z.enum(['system', 'https']).default('system'),
     SEARCH_API_KEY: z.string().min(1).optional(),
     // 吃喝玩乐类需求的兜底搜索：小红书（经 Sandbase）。不配则这类需求走 Tavily 或不回。
     SANDBASE_API_KEY: z.string().min(1).optional(),

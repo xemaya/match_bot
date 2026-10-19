@@ -12,6 +12,7 @@ const deps = {
   taskRequests: true,
   marketSearch: {},
   webSearch: { research: () => Promise.resolve({ status: 'empty', sources: [] }) },
+  pageReader: () => Promise.resolve({ status: 'unavailable', reason: 'audit_only' }),
   xhsSearch: { readNote: () => Promise.resolve(null) },
 } as unknown as AgentDeps;
 const cases = [

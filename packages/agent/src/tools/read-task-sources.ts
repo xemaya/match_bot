@@ -101,6 +101,7 @@ export async function readSavedTaskSources(
   return JSON.stringify({
     historical: saved.slice(-12).map((e) => ({
       source: e.sourceRef,
+      url: e.url,
       goalId: e.goalId,
       summary: e.summary.slice(0, 300),
       observedAt: e.observedAt,

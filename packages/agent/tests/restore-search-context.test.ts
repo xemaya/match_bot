@@ -40,6 +40,16 @@ const snapshot = (over: Record<string, unknown>) =>
   });
 
 describe('restoreSearchContext', () => {
+  it('keeps page read limits and discovered links across restoration', () => {
+    const pageReads = Array.from({ length: 6 }, (_, i) => 'read-' + i);
+    const pageLinks = [{ text: 'Register', url: 'https://clinic.test/register' }];
+    const restored = restoreSearchContext(ctx, snapshot({ pageReads, pageLinks }));
+    expect(restored.pageReads).toEqual(pageReads);
+    expect(restored.pageLinks).toEqual(pageLinks);
+    expect(() =>
+      restoreSearchContext(ctx, snapshot({ pageReads: [...pageReads, 'over-limit'] })),
+    ).toThrow();
+  });
   it('preserves the server quiet decision through the encrypted-checkpoint payload shape', () => {
     const restored = restoreSearchContext(
       ctx,

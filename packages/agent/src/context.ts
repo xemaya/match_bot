@@ -11,6 +11,7 @@ import type {
   XhsSearch,
   MarketSearch,
   MarketIntent,
+  PageReader,
 } from '@matchbot/websearch';
 import type { ModelProvider } from '@openai/agents';
 import type { XhsResearchQuery } from './xhs-research.js';
@@ -60,6 +61,8 @@ export interface MatchContext {
   currentRequest?: CurrentRequest;
   knowledgeSources?: KnowledgeSource[];
   informationQueries?: string[];
+  pageReads?: string[];
+  pageLinks?: Array<{ text: string; url: string }>;
   sourceFailures?: string[];
   answerRecorded?: boolean;
   /** Server-bound same-task context addition after a delivered answer; not a general silent-mode permission. */
@@ -117,6 +120,7 @@ export interface AgentDeps {
   evaluateOutbound: typeof evaluateOutbound;
   /** 网页信息研究（默认DeepSeek）与可选的商家核验搜索，通过装配注入。 */
   webSearch?: WebSearch;
+  pageReader?: PageReader;
   /** 吃喝玩乐类需求的小红书兜底搜索；未配 SANDBASE_API_KEY 时为空，相关工具不注册。 */
   xhsSearch?: XhsSearch;
   /** P16：匿名A2H公开搜索，始终不访问联系方式/私信或写接口。 */

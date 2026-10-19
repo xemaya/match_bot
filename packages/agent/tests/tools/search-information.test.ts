@@ -2,6 +2,28 @@ import { expect, it, vi } from 'vitest';
 import { RunContext } from '@openai/agents';
 import type { AgentDeps, MatchContext } from '../../src/context.js';
 import { searchInformationTool } from '../../src/tools/search-information.js';
+it('allows an explicit clinic domain instead of forcing every GP query to NHS', async () => {
+  const research = vi.fn().mockResolvedValue({ status: 'ok', sources: [] });
+  const ctx = {
+    phase: 0,
+    sourceMessageId: 'test',
+    currentRequest: { text: '注册GP' },
+  } as MatchContext;
+  const tool = searchInformationTool({
+    webSearch: { research },
+    repos: { traces: { create: vi.fn().mockResolvedValue({}) } },
+  } as unknown as AgentDeps);
+  await tool.invoke(
+    new RunContext(ctx),
+    JSON.stringify({
+      queries: [{ query: 'Island Health register online', domains: ['islandhealth.nhs.uk'] }],
+    }),
+  );
+  expect(research).toHaveBeenCalledWith({
+    query: 'Island Health register online',
+    domains: ['islandhealth.nhs.uk'],
+  });
+});
 it('excludes historical transport press releases from airport operational evidence', async () => {
   const ctx = {
     phase: 0,

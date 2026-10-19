@@ -1,3 +1,4 @@
+import { INFORMATION_LIMITS } from '../information-limits.js';
 import { tool, type RunContext } from '@openai/agents';
 import { z } from 'zod';
 import { assertSafeXhsKeyword } from '@matchbot/websearch';
@@ -31,7 +32,7 @@ export function searchInformationTool(deps: AgentDeps) {
       ctx.informationQueries ??= [];
       ctx.knowledgeSources ??= [];
       const fresh = args.queries.filter((q) => !ctx.informationQueries!.includes(q.query));
-      if (ctx.informationQueries.length + fresh.length > 4)
+      if (ctx.informationQueries.length + fresh.length > INFORMATION_LIMITS.queries)
         return 'Information budget exhausted. Answer from current sources, or clarify honestly.';
       const request = ctx.currentRequest?.text ?? ctx.demand?.need ?? '';
       const official = /GP|NHS|注册.*医生/i.test(request)
@@ -46,7 +47,7 @@ export function searchInformationTool(deps: AgentDeps) {
         const started = Date.now();
         const result = await deps.webSearch.research({
           query,
-          domains: official.length ? official : (q.domains ?? []),
+          domains: q.domains ?? official,
         });
         if (result.status === 'unavailable') {
           ctx.sourceFailures ??= [];
@@ -56,7 +57,14 @@ export function searchInformationTool(deps: AgentDeps) {
           // Transport news archives describe past fares, not current travel rules.
           if (/希思罗|heathrow|机场/i.test(request) && /\/press-releases\//i.test(source.url))
             continue;
-          if (ctx.knowledgeSources.length >= 16) break;
+          // Leave room to follow registration/ticket links instead of filling every slot with search hits.
+          if (
+            ctx.knowledgeSources.length >=
+            (deps.pageReader
+              ? INFORMATION_LIMITS.searchSourcesWithReader
+              : INFORMATION_LIMITS.sources)
+          )
+            break;
           if (!ctx.knowledgeSources.some((s) => s.url === source.url))
             ctx.knowledgeSources.push(
               createKnowledgeSource(source, ctx.knowledgeSources.length + 1),
@@ -77,7 +85,7 @@ export function searchInformationTool(deps: AgentDeps) {
             status: result.status,
             count: result.sources.length,
             reason: result.reason ?? null,
-            domains: official.length ? official : (q.domains ?? []),
+            domains: q.domains ?? official,
           },
           phase: ctx.phase,
           latencyMs: Date.now() - started,
@@ -92,7 +100,7 @@ export function searchInformationTool(deps: AgentDeps) {
           url: s.url,
           passages: s.passages.slice(0, 8),
         })),
-        remainingQueries: 4 - ctx.informationQueries.length,
+        remainingQueries: INFORMATION_LIMITS.queries - ctx.informationQueries.length,
         next: 'Choose useful verified facts, explain tradeoffs or steps, name unknowns. Call reply_to_request with refs, never typed URLs. No more search if enough evidence.',
       });
     },
