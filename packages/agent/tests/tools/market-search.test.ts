@@ -412,9 +412,9 @@ describe('reply_with_market_results', () => {
     expect(draft.text).not.toContain('原帖发布 2026-10-01');
     expect(draft.text).toContain(POT.url);
     expect(draft.text).toContain(POT.sourceUrl);
-    expect(draft.text).toContain('不经手交易');
+    expect(draft.text).not.toContain('不经手交易');
     expect(draft.text).toContain('[A2H详情]');
-    expect(draft.text).toContain('来自A2H公开帖子');
+    expect(draft.text).not.toContain('是否还在以贴主回复为准');
     expect(draft.text).not.toContain('有闲');
     expect(draft).toMatchObject({ mentionUserId: '42', replyToMessageId: '77' });
   });

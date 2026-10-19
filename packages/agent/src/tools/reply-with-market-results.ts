@@ -446,7 +446,6 @@ export function replyWithMarketResultsTool(deps: AgentDeps) {
         ),
         ...(ctx.marketPlan ? { evaluationDemand: buildEvaluationDemand(ctx.marketPlan, zh) } : {}),
         inputRef: ctx.sourceMessageId,
-        disclaimer: 'market' as const,
         ...groupReplyAddressing(ctx),
       });
     },

@@ -167,7 +167,7 @@ describe('reply_with_xhs_notes', () => {
     expect(row.text).toContain(recommendationArgs.recommendations[0]!.reason);
     expect(row.text).toContain('笔记提到：Southbank 集市有河边小吃摊');
     expect(row.text).toContain('[小红书原文](' + MARKET.url + ')');
-    expect(row.text).toContain('时间、价格和开放情况请以官方最新信息为准');
+    expect(row.text).not.toContain('时间、价格和开放情况请以官方最新信息为准');
     expect(row.text).not.toContain('建议先私信问问');
   });
 

@@ -499,7 +499,6 @@ export function replyToRequestTool(deps: AgentDeps) {
         taskQuestionText: args.text,
         supplierSummaries: evidence,
         inputRef: ctx.sourceMessageId,
-        ...(market.length ? { disclaimer: 'market' as const } : {}),
         ...groupReplyAddressing(ctx),
       };
     },

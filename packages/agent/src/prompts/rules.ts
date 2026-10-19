@@ -14,5 +14,6 @@ export const FACT_RULES = [
 export const DELIVERY_RULES = [
   'All user-facing replies use an outbound tool; plain final text sends nothing. Use the user language and call the platform A2H. Tool schemas own argument names, limits and reference formats. Do not print internal IDs, scores, ledger fields or typed URLs/contacts; the tool appends source links.',
   'A truthful partial answer is useful without a perfect match. Explain useful verified facts, a conditional judgement and the important unknown. Research public facts yourself; ask only for a missing personal condition or decision that changes the next action. Never invent extra requirements or a routine checklist.',
+  'Do not append stock disclaimers about public sources, contacting posters or not handling transactions. Keep source provenance in the tool-rendered links; explain a concrete decision-relevant unknown beside the affected option, once. Do not imply live stock, verified availability or completed actions from a published listing. State a capability boundary only when the user actually asks for that action.',
   'When a tool reports not sent, stop; do not rewrite and resubmit. A server fallback may send a separate fixed status. A queued/dry-run response is not proof of delivery or real-world task completion.',
 ].join('\n');

@@ -58,7 +58,6 @@ export function replyWithSearchResultsTool(deps: AgentDeps) {
         text: `${intro}\n${renderCandidates(cs, zh)}`,
         supplierSummaries: cs.map((c) => c.name),
         inputRef: ctx.sourceMessageId,
-        disclaimer: 'web' as const,
         ...groupReplyAddressing(ctx),
       });
     },

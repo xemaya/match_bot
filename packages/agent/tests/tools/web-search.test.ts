@@ -124,7 +124,7 @@ describe('web_search', () => {
 });
 
 describe('reply_with_search_results', () => {
-  it('lists the businesses itself, appends the web disclaimer, and addresses the asker', async () => {
+  it('lists the businesses itself, preserves the contacts without a generic footer, and addresses the asker', async () => {
     const d = deps();
     const c = ctx({ searchResults: [CAKE, IG] });
     await replyWithSearchResultsTool(d as never).invoke(
@@ -139,7 +139,7 @@ describe('reply_with_search_results', () => {
     expect(row.kind).toBe('recommendation');
     expect(row).toMatchObject({ mentionUserId: '42', replyToMessageId: '77' });
     expect(row.text).toBe(
-      "可以看看这两家：\nPolly Chan's Bakehouse（WhatsApp 07700900123）、Chinatown Bakery（instagram.com/chinatown.bakery）\n\n这些是公开网页信息，实际价格和可用情况以提供方回复为准。",
+      "可以看看这两家：\nPolly Chan's Bakehouse（WhatsApp 07700900123）、Chinatown Bakery（instagram.com/chinatown.bakery）",
     );
     // Instagram 不能写成 @handle：Telegram 会把它渲染成同名 Telegram 用户的链接
     expect(row.text).not.toMatch(/@chinatown/);
