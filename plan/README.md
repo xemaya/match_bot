@@ -1,3 +1,5 @@
+P46：测试方案、真实Bot/群身份与跨机器交接完成，凭证私下迁移，见 [交接文档](../docs/testing/telegram-lab-handoff.md) 和 [工作包](./P46-portable-telegram-lab.md)。
+
 P45：0.30.0 人感/主动帮忙真实回归完成，394200生成token、6条消息均实质回复；保留GP审查腔和打印机主动性缺口，见 [报告](../docs/evaluations/2026-10-19-persona-telegram-regression.md)。
 
 P44：人感与 ENFP 气质优化代码与检查完成，0.30.0；以 [PR #21](https://github.com/xemaya/match_bot/pull/21) 合并主干为生效点。1219项检查通过；无新增真实模型/Telegram测试，见 [记录](./P44-natural-enfp-voice.md)。

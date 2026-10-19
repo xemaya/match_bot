@@ -55,7 +55,7 @@ if (mode === '--plan') {
       scenarios: cases.map(({ id, role, firstMessage }) => ({ id, role, firstMessage })),
       messages: messageLimit,
       productionAgent: '0.30.0',
-      status: 'user_approved_500000_tokens_6_messages',
+      status: 'historical_batch_limits_new_run_needs_authorization',
     }) + '\n',
   );
 } else
