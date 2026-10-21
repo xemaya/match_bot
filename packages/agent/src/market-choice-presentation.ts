@@ -210,7 +210,7 @@ function renderConversationChoice(p: {
     .join(' · ')
     .replace(/[\[\]()\r\n]/g, '');
   return [
-    `${zh ? '来源：' : 'Source: '}[${label}](${row.listing.url})${row.listing.sourceUrl ? ` · [${zh ? '原帖' : 'Original post'}](${row.listing.sourceUrl})` : ''}`,
+    `[${label}](${row.listing.url})${row.listing.sourceUrl ? ` · [${zh ? '原帖' : 'Original post'}](${row.listing.sourceUrl})` : ''}`,
     row.warning
       ? zh
         ? `原帖提到“${compact(row.warning, 100)}”。`

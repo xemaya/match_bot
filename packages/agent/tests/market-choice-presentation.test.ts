@@ -267,8 +267,10 @@ it('keeps conversational sources readable without report headers or delegating a
   expect(text).not.toContain('这条还没写清');
   expect(text).toContain(listing.url);
   expect(text).toContain(listing.sourceUrl);
-  expect(text).toMatch(/^来源：/m);
+  expect(text).toMatch(
+    /^\[Stratford一居室 · £1550\/月\]\(https:\/\/a2hmarket\.ai\/listings\/home\) · \[原帖\]/m,
+  );
   expect(text).not.toMatch(
-    /尚未确认|匹配的选项|可作备选|待确认：|推荐理由：|单品报价：|逐项核对|【/,
+    /尚未确认|匹配的选项|可作备选|待确认：|推荐理由：|单品报价：|逐项核对|【|来源：/,
   );
 });

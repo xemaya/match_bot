@@ -1,5 +1,6 @@
 import { hashText } from '@matchbot/shared';
 import type { Repositories } from '@matchbot/db';
+import { splitEvidenceCard } from '@matchbot/domain';
 import type { MatchContext } from './context.js';
 
 /**
@@ -53,9 +54,10 @@ export function buildGroupTranscript(p: {
           memberAlias(m.userId) + (m.userId === p.currentUserId ? CURRENT_AUTHOR_SUFFIX : ''),
         text: m.text,
       })),
+    // Only the chat line comes back; the folded card would otherwise teach the model its own template.
     ...p.bot
       .filter((b) => b.sentAt && b.text.trim())
-      .map((b) => ({ at: b.sentAt!, speaker: BOT_SPEAKER, text: b.text })),
+      .map((b) => ({ at: b.sentAt!, speaker: BOT_SPEAKER, text: splitEvidenceCard(b.text).line })),
   ].sort((a, b) => b.at.getTime() - a.at.getTime());
   const lines: GroupLine[] = [];
   let chars = 0;

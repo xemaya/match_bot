@@ -89,18 +89,18 @@ describe('formatRecommendation', () => {
     expect(formatRecommendation(text, 'recommendation')).toEqual({ text });
   });
 
-  it('folds the evidence card into an expandable blockquote and keeps its links clickable', () => {
+  it('folds the evidence card into an expandable blockquote, drops the marker line and keeps its links clickable', () => {
     const url = 'https://www.nhs.uk/register/';
     const text =
-      '没有NHS number也能注册GP。\n\n【详情】\n注册免费，诊所可能要住址证明。\n\n来源：[1. NHS register](' +
+      '没有NHS number也能注册GP。\n\n\u2063\n注册免费，诊所可能要住址证明。\n\n[NHS register](' +
       url +
-      ')';
+      ') · [原帖](https://www.xiaohongshu.com/explore/abc)';
     const body = formatRecommendation(text, 'recommendation');
     expect(body.text).toBe(
-      '没有NHS number也能注册GP。\n\n【详情】\n注册免费，诊所可能要住址证明。\n\n来源：1. NHS register',
+      '没有NHS number也能注册GP。\n\n注册免费，诊所可能要住址证明。\n\nNHS register · 原帖',
     );
-    const cardOffset = body.text.indexOf('【详情】');
-    expect(body.entities).toContainEqual({ type: 'bold', offset: cardOffset, length: 4 });
+    expect(body.text).not.toContain('\u2063');
+    const cardOffset = body.text.indexOf('注册免费');
     expect(body.entities).toContainEqual({
       type: 'expandable_blockquote',
       offset: cardOffset,
@@ -108,10 +108,43 @@ describe('formatRecommendation', () => {
     });
     expect(body.entities).toContainEqual({
       type: 'text_link',
-      offset: body.text.indexOf('1. NHS register'),
-      length: '1. NHS register'.length,
+      offset: body.text.indexOf('NHS register'),
+      length: 'NHS register'.length,
       url,
     });
+    expect(body.entities).toContainEqual({
+      type: 'text_link',
+      offset: body.text.indexOf('原帖'),
+      length: 2,
+      url: 'https://www.xiaohongshu.com/explore/abc',
+    });
+    expect(body.entities?.some((e) => e.type === 'bold')).toBe(false);
+  });
+
+  it('still folds replies stored with the pre-P49 visible header', () => {
+    const text = '那句话\n\n【详情】\n旧卡\n\n来源：[1. NHS](https://www.nhs.uk/x)';
+    const body = formatRecommendation(text, 'recommendation');
+    const cardOffset = body.text.indexOf('【详情】');
+    expect(body.entities).toContainEqual({
+      type: 'expandable_blockquote',
+      offset: cardOffset,
+      length: body.text.length - cardOffset,
+    });
+  });
+
+  it('links only whole link lines inside the card, not markup in prose', () => {
+    const text =
+      '那句话\n\n\u2063\n细节里提到 [x](https://example.com/a) 这种写法。\n\n[a](https://example.com/a)';
+    const body = formatRecommendation(text, 'recommendation');
+    expect(body.text).toContain('细节里提到 [x](https://example.com/a) 这种写法。');
+    expect(body.entities?.filter((e) => e.type === 'text_link')).toEqual([
+      {
+        type: 'text_link',
+        offset: body.text.lastIndexOf('a'),
+        length: 1,
+        url: 'https://example.com/a',
+      },
+    ]);
   });
 
   it('does not fold a reply without a card', () => {

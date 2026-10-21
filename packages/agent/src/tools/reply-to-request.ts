@@ -27,7 +27,7 @@ const parameters = z.object({
   details: z
     .string()
     .trim()
-    .max(LIMITS.details)
+    .max(LIMITS.details * 4)
     .nullish()
     .describe(REPLY_TO_REQUEST.params.details),
   refs: z.array(z.string()).max(LIMITS.refs).describe(REPLY_TO_REQUEST.params.refs),
@@ -44,6 +44,33 @@ function stripCitations(text: string): string {
     .replace(/[（(]\s*(?:k\d+(?::p\d+)?[\s、,]*)+[)）]/g, '')
     .replace(/\bk\d+(?::p\d+)?\b/g, '')
     .trim();
+}
+/**
+ * The card's link line: no label, no numbering, one link per source joined by " · ". Scraped page
+ * titles are cleaned (markup, site suffixes, leading punctuation); a title too short to read
+ * falls back to the host name. Only code writes links; typed URLs in the draft are rejected above.
+ */
+export function sourceLabel(title: string, url: string): string {
+  let label = title
+    .replace(/<[^>]*>?/g, ' ')
+    .replace(/[\[\]()\r\n]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^[\s\-–—·|:：,，.。]+/, '')
+    .trim();
+  const split = label.split(/\s+[·|–—-]\s+/);
+  if (split.length > 1 && split[0]!.length >= 6) label = split[0]!;
+  if (label.length < 3) {
+    try {
+      label = new URL(url).hostname.replace(/^www\./, '');
+    } catch {
+      label = url;
+    }
+  }
+  return label.length > 32 ? label.slice(0, 31).trimEnd() + '…' : label;
+}
+export function renderSourceLinks(sources: ReadonlyArray<{ title: string; url: string }>): string {
+  return sources.map((s) => '[' + sourceLabel(s.title, s.url) + '](' + s.url + ')').join(' · ');
 }
 /** Group members read the line on a phone; the card is folded under it. */
 function chatLineLimit(ctx: MatchContext): { chars: number; lines: number } {
@@ -275,6 +302,7 @@ export function replyToRequestTool(deps: AgentDeps) {
       };
       const limit = chatLineLimit(ctx);
       if (exceedsChatLine(args.text, limit)) return { error: FEEDBACK.chatLineTooLong(limit) };
+      if ((args.details?.length ?? 0) > LIMITS.details) return { error: FEEDBACK.detailsTooLong };
       // The budget is six sources, not six excerpts. Validate every exact passage below;
       // never normalize away a fabricated passage to make it look like a valid source.
       const sourceRefs = new Set(args.refs.map((ref) => ref.replace(/:p\d+$/, '')));
@@ -390,21 +418,7 @@ export function replyToRequestTool(deps: AgentDeps) {
           if (!ctx.sourceFailures?.length) return { error: FEEDBACK.noRecordedOutage };
         }
         const unique = [...new Set(sources.filter((s) => !!s))];
-        const links = unique.length
-          ? (zh ? '来源：' : 'Source: ') +
-            unique
-              .map(
-                (s, i) =>
-                  '[' +
-                  (i + 1) +
-                  '. ' +
-                  s.title.replace(/[\[\]()\r\n]/g, '').slice(0, 38) +
-                  '](' +
-                  s.url +
-                  ')',
-              )
-              .join(' · ')
-          : '';
+        const links = renderSourceLinks(unique);
         card = [args.details, links];
       }
       if (
@@ -427,7 +441,7 @@ export function replyToRequestTool(deps: AgentDeps) {
         });
         return { error: FEEDBACK.noNewEvidence, kind: 'no_new_help' };
       }
-      const text = args.text + renderEvidenceCard({ zh, sections: card });
+      const text = args.text + renderEvidenceCard({ sections: card });
       if (text.length > LIMITS.rendered) return { error: FEEDBACK.tooLong };
       await deps.repos.traces.create({
         kind: 'gate',

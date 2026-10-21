@@ -3,6 +3,8 @@ import { functionCall, ScriptedModel } from '@openai/agents/testing';
 import { describe, expect, it, vi } from 'vitest';
 import { renderEvidenceCard, splitEvidenceCard } from '@matchbot/domain';
 import { createMatchAgent } from '../src/agent.js';
+import { buildGroupTranscript } from '../src/group-context.js';
+import { sourceLabel } from '../src/tools/reply-to-request.js';
 import type { AgentDeps, MatchContext } from '../src/context.js';
 import { DELIVERY_RULES, FACT_RULES, TRUST_RULES } from '../src/prompts/policy/rules.js';
 import { scenes } from '../src/prompts/policy/scenes.js';
@@ -79,7 +81,8 @@ describe('reply length is specified once, in the chat-line voice', () => {
     ].join('\n');
     expect(elsewhere).not.toMatch(/two short paragraphs|three short lines|120 Chinese/);
     expect(CHAT_LINE).toContain('150 字');
-    expect(CHAT_LINE).toContain('700 字');
+    expect(CHAT_LINE).toContain('300 字');
+    expect(CHAT_LINE).not.toContain('700');
   });
 });
 
@@ -119,18 +122,49 @@ describe('runtime packet carries research facts, not gate state', () => {
 });
 
 describe('evidence card', () => {
-  it('renders nothing without sections and folds everything after the header otherwise', () => {
-    expect(renderEvidenceCard({ zh: true, sections: [null, '', undefined] })).toBe('');
+  it('renders nothing without sections and starts the card at an invisible marker line otherwise', () => {
+    expect(renderEvidenceCard({ sections: [null, '', undefined] })).toBe('');
     const card = renderEvidenceCard({
-      zh: true,
-      sections: ['第二家在 Canary Wharf', null, '来源：x'],
+      sections: ['第二家在 Canary Wharf', null, '[NHS](https://www.nhs.uk/x)'],
     });
-    expect(card).toBe('\n\n【详情】\n第二家在 Canary Wharf\n\n来源：x');
+    expect(card).toBe('\n\n\u2063\n第二家在 Canary Wharf\n\n[NHS](https://www.nhs.uk/x)');
+    expect(card).not.toMatch(/详情|Details|来源|Source/);
     expect(splitEvidenceCard('那句话' + card)).toEqual({
       line: '那句话',
-      card: '【详情】\n第二家在 Canary Wharf\n\n来源：x',
+      card: '第二家在 Canary Wharf\n\n[NHS](https://www.nhs.uk/x)',
     });
     expect(splitEvidenceCard('只有一句话')).toEqual({ line: '只有一句话', card: null });
+  });
+  it('still splits replies stored with the pre-P49 visible header', () => {
+    expect(splitEvidenceCard('那句话\n\n【详情】\n旧卡')).toEqual({ line: '那句话', card: '旧卡' });
+  });
+  it('cleans scraped source titles into readable link labels', () => {
+    expect(sourceLabel('Visit Young V&A · V&A', 'https://www.vam.ac.uk/young/visit')).toBe(
+      'Visit Young V&A',
+    );
+    expect(sourceLabel('- Green Flag Award', 'https://www.greenflagaward.org/p')).toBe(
+      'Green Flag Award',
+    );
+    expect(
+      sourceLabel('<table><tr><td colspan="6">Southwark</', 'https://www.england.nhs.uk/x.pdf'),
+    ).toBe('Southwark');
+    expect(sourceLabel('', 'https://www.mudchute.org/whats-on')).toBe('mudchute.org');
+    expect(sourceLabel('A'.repeat(50), 'https://a.example/')).toHaveLength(32);
+  });
+});
+
+describe('group transcript', () => {
+  it('feeds back only the chat line of the bot’s own replies, never the folded card', () => {
+    const at = new Date('2026-10-21T08:00:00Z');
+    const lines = buildGroupTranscript({
+      members: [],
+      bot: [
+        { id: 'o1', text: '去 Young V&A，免费。\n\n\u2063\n第二选项 Mudchute 农场。', sentAt: at },
+      ],
+      currentMessageId: 'm0',
+      currentUserId: 'u0',
+    });
+    expect(lines.map((l) => l.text)).toEqual(['去 Young V&A，免费。']);
   });
 });
 

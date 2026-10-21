@@ -242,7 +242,10 @@ describe('reply_to_request', () => {
     );
     expect(d.repos.outbound.create).toHaveBeenCalledOnce();
     const draft = d.repos.outbound.create.mock.calls[0]?.[0] as { text: string };
-    expect(draft.text).toContain('来源：');
+    expect(draft.text).toContain(
+      '\u2063\n[NHS pharmacy finder](https://www.nhs.uk/service-search/pharmacy/find-a-pharmacy)',
+    );
+    expect(draft.text).not.toContain('来源：');
     expect(draft.text).toContain('出门取药不方便');
   });
   it('rejects inferred seller identities before a marketplace draft reaches the semantic gate', async () => {
@@ -296,9 +299,31 @@ describe('reply_to_request', () => {
     );
     expect(d.repos.outbound.create).toHaveBeenCalledOnce();
     const [draft] = d.repos.outbound.create.mock.calls[0] as unknown as [{ text: string }];
-    expect(draft.text.startsWith(args.text + '\n\n【详情】\n注册是免费的')).toBe(true);
-    expect(draft.text).toContain('\n\n来源：[1. NHS register](https://www.nhs.uk/register/)');
-    expect(draft.text.indexOf('【详情】')).toBeLessThan(draft.text.indexOf('来源：'));
+    expect(draft.text.startsWith(args.text + '\n\n\u2063\n注册是免费的')).toBe(true);
+    expect(draft.text.endsWith('\n\n[NHS register](https://www.nhs.uk/register/)')).toBe(true);
+    expect(draft.text).not.toMatch(/【详情】|来源：|\[1\. /);
+  });
+  it('sends details over 300 characters back with the fix first', async () => {
+    const { d, c, t } = setup(0);
+    const result = await t.invoke(
+      { context: c } as never,
+      JSON.stringify({
+        ...args,
+        details: '诊所可能会要住址证明，带上租房合同或银行信。'.repeat(16),
+      }),
+    );
+    expect(result).toContain('300 characters');
+    expect(d.repos.outbound.create).not.toHaveBeenCalled();
+  });
+  it('sends only the chat line when the model leaves details empty and no source is cited', async () => {
+    const { d, c, t } = setup(0);
+    await t.invoke(
+      { context: c } as never,
+      JSON.stringify({ kind: 'clarification', refs: [], text: '你是要周末还是工作日？' }),
+    );
+    expect(d.repos.outbound.create).toHaveBeenCalledOnce();
+    const [draft] = d.repos.outbound.create.mock.calls[0] as unknown as [{ text: string }];
+    expect(draft.text).toBe('你是要周末还是工作日？');
   });
   it('does not enqueue a background promise as a clarification', async () => {
     const { d, c, t } = setup(0);

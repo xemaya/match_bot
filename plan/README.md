@@ -1,3 +1,4 @@
+P49：证据卡改为例外（去【详情】标题、来源改无标签链接行、details ≤300、群记录只喂那句话），0.33.0；见 [P49-evidence-card-as-exception.md](./P49-evidence-card-as-exception.md)。
 P48：提示词按读者分层（voice / policy / stages / tools），`pnpm prompt:audit` 把各阶段全文 dump 到 docs/prompts，`reply_to_request` 拆成群聊那句话 + 折叠证据卡，0.32.0；见 [P48-prompt-layers-and-chat-line.md](./P48-prompt-layers-and-chat-line.md)。
 
 2026-10-19：仓库内演员测试（P31 控制器、模拟用户、P33–P45 真实演员脚本、P46 交接）已移除，演员统一由独立项目 actor_bots 驱动，见 [演员测试](../docs/testing/actor-bots.md)。P31/P46 工作包与历史报告仅作记录。
@@ -75,6 +76,7 @@ P36：Jev targeted 策略与本地无 Telegram 对话验证，Codex 本地实现
 | P41 | 研究停止与交付证据覆盖 | [P41-research-delivery.md](./P41-research-delivery.md) | P39 | 8 | codex | 完成 | 经PR19合并；真实回归见P43，不等于完整任务通过 | 2026-10-19 |
 | P43 | 网页核验Telegram回归 | [P43-web-telegram-regression.md](./P43-web-telegram-regression.md) | P42 | 8 | codex | 完成 | 0.29.0；401145token/6条均回复；8读页6成功，保留缺口 | 2026-10-19 |
 | P48 | 提示词分层目录、群聊发言与证据卡拆分 | [P48-prompt-layers-and-chat-line.md](./P48-prompt-layers-and-chat-line.md) | 0.31.0 工作树 | 11 | claude | 评审中 | 0.32.0：voice/policy/stages/tools 目录、prompt:audit 全文 dump、text+details 折叠证据卡 | 2026-10-21 |
+| P49 | 证据卡改为例外、去标签去来源行 | [P49-evidence-card-as-exception.md](./P49-evidence-card-as-exception.md) | P48 | 9 | claude | 评审中 | 0.33.0：不可见分隔行折叠、无标签链接行、details ≤300、群记录只喂那句话 | 2026-10-21 |
 
 ## 波次与并行
 

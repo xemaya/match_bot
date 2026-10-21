@@ -1,4 +1,4 @@
-# Prompt architecture v2（P48）
+# Prompt architecture v2（P48 / P49）
 
 生产入口仍是 `createMatchAgent`，不增加 agent 数量、模型调用或外部权限。v1（P37）只管理了系统指令；v2 把模型实际读到的五层文本全部归到一处，按**读者**组织，并用 `pnpm prompt:audit` 把每阶段的全文 dump 到 `docs/prompts/` 供人阅读。
 
@@ -44,7 +44,7 @@ packages/agent/src/prompts/
 
 ## 两个产物
 
-`reply_to_request` 的 `text` 是群里那句话（群 ≤3 行 150 字，私聊 ≤400 字，工具退回时反馈告诉模型把什么挪到 `details`），`details` 是折叠证据卡里的支撑细节（≤700 字）。代码把 `details`、市场候选块和来源行渲染成以 `【详情】` 开头的证据卡（`@matchbot/domain` 的 `renderEvidenceCard`），channel-telegram 把卡渲染成 `expandable_blockquote`，卡内来源仍是可点的 `text_link`。所有事实校验覆盖 `text` + `details`。
+`reply_to_request` 的 `text` 是群里那句话（群 ≤3 行 150 字，私聊 ≤400 字，超限退回并说明删什么）。多数回复只有这一句。`details` 是例外（P49）：只在有第二个选项、来源对推荐那家说法不一致、或动手前必须核实的那一条时才写，≤300 字，超限退回。代码把 `details`、市场候选链接行和来源链接行渲染成证据卡（`@matchbot/domain` 的 `renderEvidenceCard`），卡从一行不可见分隔符（U+2063）开始，没有可见标题；来源是无标签、无编号的链接行，标题经过清洗。channel-telegram 从分隔行起折叠为 `expandable_blockquote`，分隔行不发出，卡内整行链接渲染为 `text_link`；旧的"【详情】"与"来源："行仍能识别。群记录只把 Match Bot 自己的那句话喂回模型，不喂卡。所有事实校验覆盖 `text` + `details`。
 
 ## 运行时数据包
 

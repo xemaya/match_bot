@@ -1,4 +1,4 @@
-# 模型读到的全部文本（AGENT_VERSION 0.32.0）
+# 模型读到的全部文本（AGENT_VERSION 0.33.0）
 
 由 `pnpm prompt:audit` 生成；改了任何提示词后重新生成并一起提交。源文件归属见 `packages/agent/src/prompts/README.md`。
 
@@ -41,29 +41,29 @@
 | scene | stage | 字符 | 工具 |
 | --- | --- | ---: | --- |
 | catalogue | planning | 4938 | start_task, update_task, clarify_task, acknowledge_task |
-| catalogue | execution | 7486 | record_request, search_information, reply_to_request, record_task_progress, read_task_sources, read_web_page, find_suppliers, find_peer_supply, reply_in_group, do_nothing, react |
-| catalogue | finalization | 5458 | reply_to_request |
+| catalogue | execution | 7485 | record_request, search_information, reply_to_request, record_task_progress, read_task_sources, read_web_page, find_suppliers, find_peer_supply, reply_in_group, do_nothing, react |
+| catalogue | finalization | 5327 | reply_to_request |
 | marketplace | planning | 4938 | start_task, update_task, clarify_task, acknowledge_task |
-| marketplace | execution | 7957 | search_information, reply_to_request, record_task_progress, read_task_sources, read_web_page, do_nothing, react, market_search, market_enrich |
-| marketplace | finalization | 5458 | reply_to_request |
+| marketplace | execution | 7956 | search_information, reply_to_request, record_task_progress, read_task_sources, read_web_page, do_nothing, react, market_search, market_enrich |
+| marketplace | finalization | 5327 | reply_to_request |
 | marketplace | planning | 4938 | start_task, update_task, clarify_task, acknowledge_task |
-| marketplace | execution | 7957 | search_information, reply_to_request, record_task_progress, read_task_sources, read_web_page, do_nothing, react, market_search, market_enrich |
-| marketplace | finalization | 5458 | reply_to_request |
+| marketplace | execution | 7956 | search_information, reply_to_request, record_task_progress, read_task_sources, read_web_page, do_nothing, react, market_search, market_enrich |
+| marketplace | finalization | 5327 | reply_to_request |
 | marketplace | planning | 4938 | start_task, update_task, clarify_task, acknowledge_task |
-| marketplace | execution | 7957 | search_information, reply_to_request, record_task_progress, read_task_sources, read_web_page, do_nothing, react, market_search, market_enrich |
-| marketplace | finalization | 5458 | reply_to_request |
+| marketplace | execution | 7956 | search_information, reply_to_request, record_task_progress, read_task_sources, read_web_page, do_nothing, react, market_search, market_enrich |
+| marketplace | finalization | 5327 | reply_to_request |
 | health_access | planning | 4938 | start_task, update_task, clarify_task, acknowledge_task |
-| health_access | execution | 7627 | search_information, reply_to_request, record_task_progress, read_task_sources, read_web_page, do_nothing, react |
-| health_access | finalization | 5458 | reply_to_request |
+| health_access | execution | 7626 | search_information, reply_to_request, record_task_progress, read_task_sources, read_web_page, do_nothing, react |
+| health_access | finalization | 5327 | reply_to_request |
 | official | planning | 4938 | start_task, update_task, clarify_task, acknowledge_task |
-| official | execution | 7446 | search_information, reply_to_request, record_task_progress, read_task_sources, read_web_page, do_nothing, react |
-| official | finalization | 5458 | reply_to_request |
+| official | execution | 7445 | search_information, reply_to_request, record_task_progress, read_task_sources, read_web_page, do_nothing, react |
+| official | finalization | 5327 | reply_to_request |
 | lifestyle | planning | 4938 | start_task, update_task, clarify_task, acknowledge_task |
-| lifestyle | execution | 7749 | search_information, reply_to_request, record_task_progress, read_task_sources, read_web_page, do_nothing, react, xhs_search, xhs_read_notes, reply_with_xhs_notes |
-| lifestyle | finalization | 5458 | reply_to_request |
+| lifestyle | execution | 7748 | search_information, reply_to_request, record_task_progress, read_task_sources, read_web_page, do_nothing, react, xhs_search, xhs_read_notes, reply_with_xhs_notes |
+| lifestyle | finalization | 5327 | reply_to_request |
 | information | planning | 4938 | start_task, update_task, clarify_task, acknowledge_task |
-| information | execution | 7444 | search_information, reply_to_request, record_task_progress, read_task_sources, read_web_page, do_nothing, react |
-| information | finalization | 5458 | reply_to_request |
+| information | execution | 7443 | search_information, reply_to_request, record_task_progress, read_task_sources, read_web_page, do_nothing, react |
+| information | finalization | 5327 | reply_to_request |
 | unsupported | planning | 4938 | start_task, update_task, clarify_task, acknowledge_task |
-| unsupported | execution | 4101 | reply_to_request, do_nothing, react |
-| unsupported | finalization | 5458 | reply_to_request |
+| unsupported | execution | 4100 | reply_to_request, do_nothing, react |
+| unsupported | finalization | 5327 | reply_to_request |
