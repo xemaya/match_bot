@@ -77,11 +77,30 @@ export async function prepareTaskTurn(p: {
       taskRefs: p.ctx.taskCandidates.map((task) => task.id),
       inputRef: p.ctx.sourceMessageId,
     });
-    await runner.run(agent, p.input, {
-      context: p.ctx,
-      maxTurns: 2,
-      signal: AbortSignal.any([p.signal, AbortSignal.timeout(45000)]),
-    });
+    // 2026-10-21 run 5: a 45 s abort on the planning call dropped a printer ask for good, and its
+    // follow-up then had no task to continue. One retry when the deadline still allows it.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await runner.run(agent, p.input, {
+          context: p.ctx,
+          maxTurns: 2,
+          signal: AbortSignal.any([p.signal, AbortSignal.timeout(45000)]),
+        });
+        break;
+      } catch (error) {
+        const abortLike =
+          error instanceof Error && /timeout|abort/i.test(error.name + ' ' + error.message);
+        if (!abortLike || attempt > 0 || p.signal.aborted) throw error;
+        await p.deps.repos.traces.create({
+          kind: 'gate',
+          inputRef: p.ctx.sourceMessageId,
+          phase: p.ctx.phase,
+          latencyMs: 0,
+          costMicro: 0,
+          output: { gate: 'task_preparation_retry', reason: 'aborted_planning_call' },
+        });
+      }
+    }
     if (p.ctx.taskUpdate) {
       if (p.ctx.taskUpdate.kind !== 'ambiguous' && p.ctx.taskUpdate.kind !== 'unbound')
         delete p.ctx.taskCandidates;
@@ -98,6 +117,7 @@ export async function prepareTaskTurn(p: {
       output: {
         gate: 'task_preparation_failed',
         error: error instanceof Error ? error.name : 'unknown_error',
+        detail: error instanceof Error ? error.message.slice(0, 200) : '',
       },
     });
   }

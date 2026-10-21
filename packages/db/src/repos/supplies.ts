@@ -18,9 +18,10 @@ export function suppliesRepo(prisma: PrismaClient) {
         },
       });
     },
-    findActive(category: DemandCategory): Promise<Supply[]> {
+    /** Peer offers are group-scoped: a member's offer is only matched inside the group it was posted in. */
+    findActive(category: DemandCategory, groupId: string): Promise<Supply[]> {
       return prisma.supply.findMany({
-        where: { category, expiresAt: { gt: new Date() } },
+        where: { category, groupId, expiresAt: { gt: new Date() } },
         orderBy: { createdAt: 'desc' },
       });
     },

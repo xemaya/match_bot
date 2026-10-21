@@ -1,13 +1,14 @@
 import { tool, type RunContext } from '@openai/agents';
 import { z } from 'zod';
 import { canSkipSupplementReply } from '../supplement-replies.js';
+import { isUnsolicitedGroupTurn } from '../request-status.js';
 import type { AgentDeps, MatchContext } from '../context.js';
+import { DO_NOTHING } from '../prompts/tools/do-nothing.js';
 
 export function doNothingTool(deps: AgentDeps) {
   return tool({
     name: 'do_nothing',
-    description:
-      'Explicitly take no action for irrelevant chatter, acknowledgement, job recruitment or a declined gate. London daily-life, GP registration and airport advice ARE supported. A server-authorized same-task context addition may end quietly when nothing new would help; otherwise no match or unavailable source needs reply_to_request.',
+    description: DO_NOTHING.description,
     parameters: z.object({
       reason: z.string().max(300),
     }),
@@ -23,13 +24,18 @@ export function doNothingTool(deps: AgentDeps) {
       });
       if (canSkipSupplementReply(ctx)) {
         ctx.replySuppressed = true;
-        return 'ok: no new helpful answer for this same-task context addition; stop without another reply or status';
+        return DO_NOTHING.results.supplementQuiet;
+      }
+      // Nobody asked the assistant directly: with nothing useful to add, silence is the right reply.
+      if (isUnsolicitedGroupTurn(ctx)) {
+        ctx.replySuppressed = true;
+        return DO_NOTHING.results.groupQuiet;
       }
       return ctx.currentRequest?.isActionable &&
         !ctx.outboundBlocked &&
         ctx.currentRequest.demand.category !== 'job'
-        ? 'This is an actionable current request. Use reply_to_request for an answer or honest no-match/clarification/unavailable; do not silently stop.'
-        : 'ok';
+        ? DO_NOTHING.results.actionable
+        : DO_NOTHING.results.ok;
     },
   });
 }

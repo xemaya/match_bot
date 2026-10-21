@@ -96,6 +96,13 @@ function fixture(score = 0.1) {
 }
 
 describe('market offer counter-evidence review', () => {
+  it('JEV_POLICY=off establishes no conflict and never calls the model (2026-10-20 runs 2–4 regression)', async () => {
+    const { ctx, deps, evaluate } = fixture(0.99);
+    Object.assign(deps, { env: { JEV_POLICY: 'off' } });
+    expect(await checkMarketOfferConflicts(deps, ctx, ['m1'])).toEqual({ kind: 'clear' });
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(ctx.task?.goals[0]?.criteria[0]?.status).toBe('unknown');
+  });
   it('blocks a conflicting backup before the outbound gate or outbox, rather than silently editing it', async () => {
     const { ctx, deps } = fixture(0.99);
     ctx.taskProgressVersion = ctx.task!.requirementsVersion;

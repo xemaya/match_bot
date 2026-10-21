@@ -81,7 +81,7 @@ for (const file of readdirSync('packages/agent/src', { recursive: true, encoding
   .filter((n) => n.endsWith('.ts'))
   .sort())
   hash.update(file).update(readFileSync('packages/agent/src/' + file));
-hash.update(readFileSync('packages/agent/SOUL.md'));
+hash.update(readFileSync('packages/agent/prompts/voice/soul.md'));
 const fingerprint = hash.digest('hex'),
   runId = randomUUID(),
   started = Date.now();

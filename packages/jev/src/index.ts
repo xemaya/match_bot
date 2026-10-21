@@ -11,7 +11,3 @@ export {
   sourceSupportQuestions,
   type SourceClaim,
 } from './questions/source-support.js';
-export {
-  evaluateParticipantOutbound,
-  participantOutboundQuestions,
-} from './questions/participant-outbound.js';

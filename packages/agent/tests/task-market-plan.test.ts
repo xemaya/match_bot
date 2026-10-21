@@ -201,6 +201,33 @@ describe('task-bound marketplace plan', () => {
     expect(result.requiredArea).toEqual(['E14']);
     expect(result.budget).toBeUndefined();
   });
+  it('keeps the model aliases when its need ids differ from the goal ids', () => {
+    const t = task();
+    t.goals[1]!.userConfirmation = { userId: 'u', sourceMessageId: 'bought', intent: 'achieved' };
+    const single = bindTaskMarketPlan(
+      { ...modelPlan, needs: [{ id: 'writing_desk', terms: ['写字台', 'desk'] }] },
+      t,
+    );
+    expect(single.needs.map((n) => n.id)).toEqual(['desk']);
+    expect(single.needs[0]?.terms).toEqual(expect.arrayContaining(['书桌', '写字台', 'desk']));
+    const positional = bindTaskMarketPlan(
+      {
+        ...modelPlan,
+        needs: [
+          { id: 'n1', terms: ['写字台'] },
+          { id: 'n2', terms: ['转椅'] },
+        ],
+      },
+      task(),
+    );
+    expect(positional.needs[0]?.terms).toContain('写字台');
+    expect(positional.needs[1]?.terms).toContain('转椅');
+    const unmatched = bindTaskMarketPlan(
+      { ...modelPlan, needs: [{ id: 'n1', terms: ['写字台'] }] },
+      task(),
+    );
+    expect(unmatched.needs.flatMap((n) => n.terms)).not.toContain('写字台');
+  });
   it('does not search a solved item or invent an unspecified budget', () => {
     const t = task();
     t.goals[1]!.userConfirmation = { userId: 'u', sourceMessageId: 'bought', intent: 'achieved' };

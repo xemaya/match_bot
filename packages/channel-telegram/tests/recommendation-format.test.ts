@@ -89,6 +89,36 @@ describe('formatRecommendation', () => {
     expect(formatRecommendation(text, 'recommendation')).toEqual({ text });
   });
 
+  it('folds the evidence card into an expandable blockquote and keeps its links clickable', () => {
+    const url = 'https://www.nhs.uk/register/';
+    const text =
+      '没有NHS number也能注册GP。\n\n【详情】\n注册免费，诊所可能要住址证明。\n\n来源：[1. NHS register](' +
+      url +
+      ')';
+    const body = formatRecommendation(text, 'recommendation');
+    expect(body.text).toBe(
+      '没有NHS number也能注册GP。\n\n【详情】\n注册免费，诊所可能要住址证明。\n\n来源：1. NHS register',
+    );
+    const cardOffset = body.text.indexOf('【详情】');
+    expect(body.entities).toContainEqual({ type: 'bold', offset: cardOffset, length: 4 });
+    expect(body.entities).toContainEqual({
+      type: 'expandable_blockquote',
+      offset: cardOffset,
+      length: body.text.length - cardOffset,
+    });
+    expect(body.entities).toContainEqual({
+      type: 'text_link',
+      offset: body.text.indexOf('1. NHS register'),
+      length: '1. NHS register'.length,
+      url,
+    });
+  });
+
+  it('does not fold a reply without a card', () => {
+    const body = formatRecommendation('只有一句话', 'recommendation');
+    expect(body.entities ?? []).toEqual([]);
+  });
+
   it('leaves other message kinds and markup in note content unchanged', () => {
     const text = '1. title\n笔记提到：[link](https://example.com)';
     expect(formatRecommendation(text, 'clarification')).toEqual({ text });

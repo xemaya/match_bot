@@ -10,7 +10,8 @@ export const MARKET_RESEARCH_LIMITS = {
  * 喂给模型的描述只给头部：模型据此挑选与转述，引文由代码对 ctx 里的全文校验
  * （子串关系保持成立）。实测整段 listing JSON 占 session 字符的大头。
  */
-export const MARKET_EXCERPT_CHARS = { search: 500, detail: 1500 } as const;
+// search excerpts are re-sent on every later turn; detail is read once for shortlisted refs.
+export const MARKET_EXCERPT_CHARS = { search: 250, detail: 1500 } as const;
 export const marketQuerySchema = z.object({
   keyword: z.string().min(2).max(60),
   page: z.number().int().min(1).max(3),

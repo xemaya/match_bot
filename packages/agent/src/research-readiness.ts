@@ -1,4 +1,5 @@
 import type { MatchContext } from './context.js';
+import { REPLY_TO_REQUEST } from './prompts/tools/reply-to-request.js';
 
 /** Minimum effort gate, not proof of correctness: a fresh query may still return no answer. */
 export function pendingResearchConditions(ctx: MatchContext): string[] {
@@ -43,8 +44,5 @@ export function pendingResearchConditions(ctx: MatchContext): string[] {
 }
 
 export function researchFollowupInstruction(ctx: MatchContext): string {
-  return (
-    'The new hard conditions below are still unverified. Reading saved sources is not a new search. Use a short focused query for the actual item/venue and missing condition, or search an alternative that explicitly satisfies it. Do not infer facts from a model name. Stay within the remaining tool/time budget; if sources fail or evidence remains missing, deliver an honest partial answer. Condition keys: ' +
-    JSON.stringify(pendingResearchConditions(ctx))
-  );
+  return REPLY_TO_REQUEST.feedback.researchFollowup(pendingResearchConditions(ctx));
 }

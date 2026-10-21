@@ -6,6 +6,125 @@ import type { AgentDeps, MatchContext } from '../../src/context.js';
 import { recordTaskProgressTool } from '../../src/tools/record-task-progress.js';
 
 describe('record_task_progress source review', () => {
+  it('under JEV_POLICY=off keeps claims the server condition check agrees with and nothing else', async () => {
+    const listing = {
+      id: 'room',
+      ref: 'm1',
+      title: '伦敦合租',
+      description: '出租：Stratford E15 单间\n租金：£850/月\n账单：包bill',
+      tags: [],
+      tradeType: 'SELL' as const,
+      status: 'ON_SALE' as const,
+      url: 'https://a2hmarket.ai/listings/room',
+      sourceUrl: null,
+      isRepost: false,
+      priceLabel: '£850/月',
+      availableFrom: null,
+      availableUntil: null,
+      sourcePublishedAt: null,
+      createdAt: null,
+    };
+    const criterion = (id: string, constraintKey: string) => ({
+      id,
+      label: '核对当前条件：' + constraintKey,
+      constraintKey,
+      strength: 'hard',
+      status: 'unknown',
+      evidenceRefs: [],
+    });
+    const ctx: MatchContext = {
+      userId: 'u',
+      chatId: 'c',
+      groupId: 'g',
+      sourceMessageId: 'm',
+      phase: 2,
+      recentReplies: [],
+      task: taskSchema.parse({
+        id: 't',
+        ownerUserId: 'u',
+        scope: { channel: 'telegram', chatId: 'c' },
+        objective: '找东伦敦合租',
+        category: 'housing',
+        counterparty: 'supply',
+        status: 'active',
+        revision: 0,
+        goals: [
+          {
+            id: 'room',
+            title: '东伦敦合租房间',
+            required: true,
+            criteria: [criterion('budget', 'budget'), criterion('bills', 'bills')],
+          },
+        ],
+        constraints: [
+          {
+            key: 'budget',
+            goalId: 'room',
+            strength: 'hard',
+            value: { kind: 'money', amountPence: 100000, unit: 'month' },
+            origin: { kind: 'user', sourceMessageId: 'm' },
+          },
+          {
+            key: 'bills',
+            goalId: 'room',
+            strength: 'hard',
+            value: { kind: 'boolean', value: true },
+            origin: { kind: 'user', sourceMessageId: 'm' },
+          },
+        ],
+        evidence: [],
+        pendingQuestion: null,
+        blockReason: null,
+        delivery: { status: 'none', level: 'none' },
+        userConfirmation: null,
+      }),
+      marketPlan: {
+        intent: 'housing',
+        needs: [{ id: 'room', terms: ['合租', '单间'], budget: 1000 }],
+        preferences: [],
+        budget: 1000,
+        budgetUnit: 'month',
+      },
+      marketListings: [listing],
+    };
+    const evaluate = vi.fn();
+    const recordProgress = vi.fn(
+      (p: { progress: Omit<Parameters<typeof recordTaskProgress>[0], 'task'> }) => {
+        const task = recordTaskProgress({ task: ctx.task!, ...p.progress });
+        return Promise.resolve({ kind: 'applied', task });
+      },
+    );
+    const tool = recordTaskProgressTool({
+      env: { JEV_POLICY: 'off' },
+      jev: { evaluate },
+      thresholds: DEFAULT_THRESHOLDS,
+      repos: { tasks: { recordProgress }, traces: { create: () => Promise.resolve({}) } },
+    } as unknown as AgentDeps);
+    const out = await tool.invoke(
+      new RunContext(ctx),
+      JSON.stringify({
+        checks: [
+          {
+            goalId: 'room',
+            criterionId: 'budget',
+            status: 'supported',
+            sources: [{ ref: 'm1', quote: null }],
+          },
+          {
+            goalId: 'room',
+            criterionId: 'bills',
+            status: 'supported',
+            sources: [{ ref: 'm1', quote: '账单：包bill' }],
+          },
+        ],
+        next: { action: 'research', goalId: 'room', constraintKey: 'bills', reason: '继续核对' },
+      }),
+    );
+    expect(evaluate).not.toHaveBeenCalled();
+    const statuses = Object.fromEntries(ctx.task!.goals[0]!.criteria.map((c) => [c.id, c.status]));
+    expect(statuses).toEqual({ budget: 'supported', bills: 'unknown' });
+    expect((JSON.parse(out) as { rejectedCriteria: string[] }).rejectedCriteria).toEqual(['bills']);
+  });
   it.each([false, true])(
     'retains rejected interpretations and requires new research only for changed hard conditions (%s)',
     async (continued) => {

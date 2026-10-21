@@ -9,6 +9,7 @@ import {
   contextInputFilter,
   isRuntimeContextItem,
   runtimeContext,
+  PromptContextBudgetError,
 } from '../src/prompts/runtime-context.js';
 import { createPgSession } from '../src/session.js';
 
@@ -229,4 +230,53 @@ it('prioritizes selected delivery sources while retaining complementary evidence
     evidence.flatMap((s) => s.passages).reduce((n, p) => n + p.text.length, 0),
   ).toBeLessThanOrEqual(24000);
   expect(evidence.flatMap((s) => s.omittedPassageIds).length).toBeGreaterThan(0);
+});
+
+it('stops an execution turn whose whole model input exceeds the per-turn budget', () => {
+  const filter = contextInputFilter('execution');
+  const ctx = context();
+  const small = filter({
+    modelData: { input: [], instructions: '' } as never,
+    context: ctx,
+  } as never);
+  expect(JSON.stringify(small.input)).toContain('matchbot_runtime_context');
+  const history = Array.from({ length: 60 }, (_, i) => ({
+    type: 'function_call_result',
+    name: 'market_search',
+    callId: 'c' + i,
+    status: 'completed',
+    output: { type: 'text', text: 'x'.repeat(1500) },
+  }));
+  expect(() =>
+    filter({ modelData: { input: history, instructions: '' } as never, context: ctx } as never),
+  ).toThrow(PromptContextBudgetError);
+  expect(() =>
+    contextInputFilter('finalization')({
+      modelData: { input: history, instructions: '' } as never,
+      context: ctx,
+    } as never),
+  ).not.toThrow();
+});
+
+it('stops a message whose execution turns together exceed the per-message input budget', () => {
+  const filter = contextInputFilter('execution');
+  const ctx = context();
+  const turn = Array.from({ length: 20 }, (_, i) => ({
+    type: 'function_call_result',
+    name: 'market_search',
+    callId: 'r' + i,
+    status: 'completed',
+    output: { type: 'text', text: 'y'.repeat(1500) },
+  }));
+  const call = () =>
+    filter({ modelData: { input: turn, instructions: '' } as never, context: ctx } as never);
+  // The filter is synchronous; the SDK type allows a promise, hence void.
+  void call();
+  void call();
+  void call();
+  expect(call).toThrow(/per-message budget/);
+  // Another message starts from zero.
+  expect(() =>
+    filter({ modelData: { input: turn, instructions: '' } as never, context: context() } as never),
+  ).not.toThrow();
 });

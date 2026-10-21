@@ -515,5 +515,26 @@ export function outboundRepo(prisma: PrismaClient, accountId = '') {
         where: { target, status: 'sent', sentAt: { gte: since }, ...(kind ? { kind } : {}) },
       });
     },
+    /** What the bot actually posted to a chat recently (confirmed sends only), newest first. */
+    recentSentToTarget(
+      target: string,
+      p: { limit: number; sinceHours: number; before?: Date },
+    ): Promise<Array<{ id: string; text: string; kind: OutboundKind; sentAt: Date | null }>> {
+      return prisma.outboundMessage.findMany({
+        where: {
+          target,
+          status: 'sent',
+          kind: { not: 'reaction' },
+          text: { not: '' },
+          sentAt: {
+            gte: new Date(Date.now() - p.sinceHours * 3600e3),
+            ...(p.before ? { lt: p.before } : {}),
+          },
+        },
+        orderBy: { sentAt: 'desc' },
+        take: Math.min(Math.max(1, p.limit), 100),
+        select: { id: true, text: true, kind: true, sentAt: true },
+      });
+    },
   };
 }

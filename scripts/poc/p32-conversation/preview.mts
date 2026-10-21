@@ -150,7 +150,7 @@ for (const file of readdirSync('packages/agent/src', { recursive: true, encoding
   .filter((n) => n.endsWith('.ts'))
   .sort())
   fingerprint.update(file).update(readFileSync('packages/agent/src/' + file));
-fingerprint.update(readFileSync('packages/agent/SOUL.md'));
+fingerprint.update(readFileSync('packages/agent/prompts/voice/soul.md'));
 const sourceFingerprint = fingerprint.digest('hex');
 const save = (status: string, used: number) =>
   writeFileSync(

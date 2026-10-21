@@ -45,6 +45,156 @@ export type MarketAssessment = {
 const norm = (s: string) => s.normalize('NFKC').toLowerCase().replace(/\s+/g, '');
 const contains = (text: string, terms: string[]) =>
   terms.some((term) => norm(text).includes(norm(term)));
+/**
+ * 用户说"东伦敦"，帖子只写 Stratford 或 E15：方位词展开为该方位常见街区与邮编前缀。
+ * 2026-10-20 合租重放：东伦敦帖子全部因地点"未知"排在备选，只有标题写了"东伦敦"的 SE12 被判符合。
+ */
+const LONDON_REGIONS: ReadonlyArray<{ match: RegExp; prefixes: string[]; districts: string[] }> = [
+  {
+    match: /^(?:东伦敦|伦敦东(?:部|区|边)?|东区|east london)$/i,
+    prefixes: ['E'],
+    districts: [
+      'Stratford',
+      'Mile End',
+      'Whitechapel',
+      'Bethnal Green',
+      'Hackney',
+      'Canary Wharf',
+      'Isle of Dogs',
+      'Poplar',
+      'Limehouse',
+      'Wapping',
+      'Stepney',
+      'Shoreditch',
+      'Dalston',
+      'Leyton',
+      'Leytonstone',
+      'Walthamstow',
+      'West Ham',
+      'East Ham',
+      'Plaistow',
+      'Canning Town',
+      'Forest Gate',
+      'Homerton',
+      'Clapton',
+      '狗岛',
+      '金丝雀码头',
+    ],
+  },
+  {
+    match: /^(?:东南伦敦|伦敦东南(?:部|区)?|south ?east london)$/i,
+    prefixes: ['SE'],
+    districts: [
+      'Greenwich',
+      'Lewisham',
+      'Deptford',
+      'Peckham',
+      'Camberwell',
+      'Elephant and Castle',
+      'Bermondsey',
+      'Woolwich',
+      'New Cross',
+      'Brockley',
+      'Catford',
+      '格林威治',
+    ],
+  },
+  {
+    match: /^(?:西南伦敦|伦敦西南(?:部|区)?|south ?west london)$/i,
+    prefixes: ['SW'],
+    districts: [
+      'Clapham',
+      'Battersea',
+      'Wimbledon',
+      'Putney',
+      'Fulham',
+      'Brixton',
+      'Tooting',
+      'Balham',
+      'Vauxhall',
+      'Wandsworth',
+    ],
+  },
+  {
+    match: /^(?:南伦敦|伦敦南(?:部|区|边)?|south london)$/i,
+    prefixes: ['SE', 'SW'],
+    districts: [
+      'Greenwich',
+      'Lewisham',
+      'Peckham',
+      'Camberwell',
+      'Clapham',
+      'Battersea',
+      'Brixton',
+      'Wimbledon',
+      'Croydon',
+    ],
+  },
+  {
+    match: /^(?:西伦敦|伦敦西(?:部|区|边)?|west london)$/i,
+    prefixes: ['W'],
+    districts: [
+      'Ealing',
+      'Acton',
+      'Hammersmith',
+      "Shepherd's Bush",
+      'Chiswick',
+      'Notting Hill',
+      'Kensington',
+      'Paddington',
+      'Bayswater',
+    ],
+  },
+  {
+    match: /^(?:西北伦敦|伦敦西北(?:部|区)?|north ?west london)$/i,
+    prefixes: ['NW'],
+    districts: [
+      'Camden',
+      'Hampstead',
+      'Kilburn',
+      'Wembley',
+      'Willesden',
+      'Cricklewood',
+      'Hendon',
+      'Golders Green',
+      'Swiss Cottage',
+      'Kentish Town',
+    ],
+  },
+  {
+    match: /^(?:北伦敦|伦敦北(?:部|区|边)?|north london)$/i,
+    prefixes: ['N', 'NW'],
+    districts: [
+      'Islington',
+      'Finsbury Park',
+      'Archway',
+      'Highgate',
+      'Wood Green',
+      'Tottenham',
+      'Holloway',
+      'Finchley',
+      'Highbury',
+      'Stoke Newington',
+      'Camden',
+      'Hampstead',
+    ],
+  },
+  {
+    match: /^(?:市中心|伦敦市中心|中心区|central london|zone ?1)$/i,
+    prefixes: ['EC', 'WC'],
+    districts: [
+      'Soho',
+      'Covent Garden',
+      'Holborn',
+      'Bloomsbury',
+      "King's Cross",
+      'Kings Cross',
+      'Farringdon',
+      'Liverpool Street',
+      'Westminster',
+    ],
+  },
+];
 const lines = (text: string) =>
   text
     .split(/[\n；;]/u)
@@ -120,13 +270,19 @@ function priceEvidence(
     if (p.intent === 'housing' && !/\/月|每月|月租|pcm|per month/i.test(line)) continue;
     if (/免费送|免费赠送|free (?:to collect|giveaway)/i.test(line))
       return { text: line, min: 0, max: 0 };
+    // "£1,230/月" is 1230, not 1 (2026-10-21: two over-cap rooms passed the budget check as £1).
+    const gbp = (text: string) => Number(text.replace(/,/g, ''));
     const amounts = [
-      ...line.matchAll(/(?:£|GBP\s*)(\d+(?:\.\d+)?)|\b(\d+(?:\.\d+)?)\s*(?:镑|英镑)/gi),
-    ].map((m) => Number(m[1] ?? m[2]));
+      ...line.matchAll(
+        /(?:£|GBP\s*)(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)|\b(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*(?:镑|英镑)/gi,
+      ),
+    ].map((m) => gbp(m[1] ?? m[2]!));
     const ranges = [
-      ...line.matchAll(/(?:£|GBP\s*)(\d+(?:\.\d+)?)\s*[–—-]\s*(?:£)?(\d+(?:\.\d+)?)/g),
+      ...line.matchAll(
+        /(?:£|GBP\s*)(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*[–—-]\s*(?:£)?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)/g,
+      ),
     ];
-    for (const range of ranges) amounts.push(Number(range[2]));
+    for (const range of ranges) amounts.push(gbp(range[2]!));
     if (!amounts.length) continue;
     // 单句多商品价格不能互借；房间的多个价格也只有都明确同一预算时才可判满足。
     if (amounts.length > 2 || /[：:].*(?:锅|桌|椅|灯).*[：:]/.test(line)) continue;
@@ -437,26 +593,40 @@ function assessSharedMarketListing(
         (p.intent === 'housing' && /^(?:出租|转租|合租|找室友)[：:]/.test(line)),
     );
     const londonOnly = p.requiredArea.every((term) => /^(?:伦敦|倫敦|London)$/i.test(term));
-    const actual = locations.find(
-      (line) =>
-        contains(line, p.requiredArea!) ||
-        (londonOnly && hasLondonEvidence({ ...n, title: '', description: line, tags: [] })),
+    const regions = p.requiredArea.flatMap((term) =>
+      LONDON_REGIONS.filter((region) => region.match.test(term.trim())),
     );
+    const regionNames = regions.flatMap((region) => region.districts);
+    const regionPrefixes = regions.flatMap((region) => region.prefixes);
     const outcodes = (text: string) =>
       [...text.matchAll(/\b(?:SE|SW|NW|EC|WC|E|W|N)\d{1,2}[A-Z]?\b/gi)].map((m) =>
         m[0].toUpperCase(),
       );
+    const inRegion = (code: string) => regionPrefixes.includes(code.match(/^[A-Z]+/)?.[0] ?? '');
+    const literal = locations.find((line) => contains(line, p.requiredArea!));
+    const actual =
+      literal ??
+      locations.find(
+        (line) =>
+          contains(line, regionNames) ||
+          outcodes(line).some(inRegion) ||
+          (londonOnly && hasLondonEvidence({ ...n, title: '', description: line, tags: [] })),
+      );
     const requestedCodes = p.requiredArea.flatMap(outcodes),
       foundCodes = locations.flatMap(outcodes);
-    const knownConflict =
-      requestedCodes.length > 0 &&
+    const codeConflict =
       foundCodes.length > 0 &&
-      !foundCodes.some((code) => requestedCodes.includes(code));
-    checks.push({
-      label: 'area',
-      status: knownConflict ? 'mismatch' : actual ? 'met' : 'unknown',
-      evidence: actual ?? locations[0] ?? null,
-    });
+      (requestedCodes.length > 0 || regionPrefixes.length > 0) &&
+      !foundCodes.some((code) => requestedCodes.includes(code) || inRegion(code));
+    // A post that calls itself 东伦敦 but gives an SE postcode is left for the user to judge.
+    const status = codeConflict
+      ? literal && !requestedCodes.length
+        ? 'unknown'
+        : 'mismatch'
+      : actual
+        ? 'met'
+        : 'unknown';
+    checks.push({ label: 'area', status, evidence: actual ?? locations[0] ?? null });
   }
   let price = priceEvidence(n, p, focusName);
   const weeklyConflict = price ? null : weeklyRentConflict(n, p);
@@ -598,6 +768,10 @@ const terms = z
   .describe(
     'At most 12 public terms, each 1-60 characters. Use a small set of genuine aliases, not every imaginable spelling.',
   );
+const areaTerms = z
+  .array(z.string().trim().min(1).max(60))
+  .max(20)
+  .describe('At most 20 public area names (districts, postcodes, zones), each 1-60 characters.');
 export const marketPlanInputSchema = z.object({
   needs: z
     .array(
@@ -618,7 +792,7 @@ export const marketPlanInputSchema = z.object({
   preferences: terms,
   requiredTerms: terms,
   excludeTerms: terms,
-  requiredArea: terms,
+  requiredArea: areaTerms,
   budget: z.number().finite().nonnegative().max(100000).nullable(),
   route: z.object({ from: terms.min(1), to: terms.min(1) }).nullable(),
   dateRange: z.object({ from: z.iso.date(), to: z.iso.date() }).nullable(),
@@ -633,7 +807,7 @@ export const marketRulesSchema = marketPlanInputSchema.omit({ needs: true }).ext
   essentialPreferences: terms.optional(),
   requiredTerms: terms.optional(),
   excludeTerms: terms.optional(),
-  requiredArea: terms.optional(),
+  requiredArea: areaTerms.optional(),
 });
 export const marketPlanSchema = marketRulesSchema.extend({
   intent: z.enum(['second_hand', 'housing', 'carry', 'companion']),

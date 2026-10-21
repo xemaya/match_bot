@@ -1,6 +1,7 @@
 import { pendingResearchConditions, researchFollowupInstruction } from './research-readiness.js';
 import { buildDeliveryPacket } from './delivery-context.js';
 import { replyRequestStatusTool } from './tools/reply-request-status.js';
+import { hasStatusValue, renderRequestStatus, isUnsolicitedGroupTurn } from './request-status.js';
 import { canSkipSupplementReply } from './supplement-replies.js';
 import { bindCurrentRequest } from './current-request.js';
 import { createRequire } from 'node:module';
@@ -24,7 +25,9 @@ export type RunOutcome =
   { kind: 'completed'; toolsCalled: string[] } | { kind: 'interrupted'; runStateId: string };
 
 const SNAPSHOT_TTL_DAYS = 7; // AGENTS.md §6：7 天后标 expired
-const MAX_TURNS = 12; // P14：需求建档 + 分主题召回 + 展名补全 + 一次回复，仍有固定上限
+// 2026-10-20 联合实测：单条消息 7–10 轮、每轮重发全部证据，10 万 token 后仍无回复。8 轮够
+// 建档 + 两次检索 + 一次读页 + 回复；超过就交给 finalizeRequest 用已有证据作答。
+const MAX_TURNS = 8;
 
 /** 从 @openai/agents 的 package.json 读版本，避免手写漂移；读不到就标 unknown。 */
 function resolveSdkVersion(): string {
@@ -49,8 +52,14 @@ class ObsoleteResumeError extends Error {
 }
 
 const RUN_OPTIONS = { maxTurns: MAX_TURNS } as const;
-const RUN_TIMEOUT_MS = 150000;
-const DELIVERY_RESERVE_MS = 30000;
+/** The SDK surfaces a deadline hit mid-request as a plain Error("Request was aborted."). */
+const isAbortLike = (error: Error) => /timeout|abort/i.test(error.name + ' ' + error.message);
+// 2026-10-21 run 5: first delivery drafts took 26-38 s on the Bailian endpoint, so a draft, a
+// rejection and a repair did not fit in 45 s and two answers were lost at "Request was aborted".
+const RUN_TIMEOUT_MS = 210000;
+const DELIVERY_WINDOW_MS = 75000;
+const DELIVERY_RESERVE_MS = DELIVERY_WINDOW_MS;
+const FINALIZATION_WINDOW_MS = DELIVERY_WINDOW_MS;
 
 export async function runInbound(p: {
   deps: AgentDeps;
@@ -151,6 +160,19 @@ export async function runInbound(p: {
     });
   }
   const ambiguous = p.ctx.taskUpdate?.kind === 'ambiguous' || p.ctx.taskUpdate?.kind === 'unbound';
+  // A member talking to another member never asked us which task they meant; asking back in the
+  // group ("你要我往哪边走") is noise. 2026-10-21 run 5: 小林 answering 小陆 about wifi got exactly that.
+  if (ambiguous && isUnsolicitedGroupTurn(p.ctx)) {
+    await p.deps.repos.traces.create({
+      kind: 'gate',
+      inputRef: p.ctx.sourceMessageId,
+      phase: p.ctx.phase,
+      latencyMs: 0,
+      costMicro: 0,
+      output: { gate: 'task_binding', decision: 'do_nothing', reason: 'ambiguous_unsolicited' },
+    });
+    return { kind: 'completed', toolsCalled: [] };
+  }
   if (!ambiguous) await refreshTaskSourceMemory({ ...p, agentVersion: AGENT_VERSION });
   const { agent, runner } = createMatchAgent(p.deps, {
     context: p.ctx,
@@ -189,12 +211,18 @@ export async function runInbound(p: {
       latencyMs: 0,
       costMicro: 0,
     });
+    const budgetStop =
+      error.name === 'MaxTurnsExceededError' || error.name === 'PromptContextBudgetError';
+    // A budget stop usually lands late in the run window; the one-shot finalization still needs
+    // its own time, or its model request is aborted (2026-10-20 run 4: three asks lost this way).
+    if (budgetStop)
+      p.ctx.runDeadlineAt = Math.max(p.ctx.runDeadlineAt ?? 0, Date.now() + FINALIZATION_WINDOW_MS);
     if (
       !p.ctx.outboundBlocked &&
       !p.ctx.answerInputExhausted &&
-      (error.name === 'MaxTurnsExceededError' ||
+      (budgetStop ||
         (p.deps.taskRequests &&
-          (error.name === 'TimeoutError' || error.name === 'AbortError') &&
+          isAbortLike(error) &&
           (p.ctx.knowledgeSources?.length || p.ctx.marketListings?.length))) &&
       (p.ctx.runDeadlineAt ?? 0) > Date.now()
     )
@@ -282,7 +310,7 @@ async function finalizeRequest(
   p: { deps: AgentDeps; ctx: MatchContext; input: string },
   session: ReturnType<typeof createPgSession>,
 ): Promise<RunOutcome> {
-  const remaining = (p.ctx.runDeadlineAt ?? Date.now() + 30000) - Date.now();
+  const remaining = (p.ctx.runDeadlineAt ?? Date.now() + DELIVERY_WINDOW_MS) - Date.now();
   if (remaining <= 0) return respondRequestStatus(p, session);
   p.ctx.isAnswerFinalization = true;
   const packet = buildDeliveryPacket(p.ctx);
@@ -328,7 +356,7 @@ async function finalizeRequest(
       context: p.ctx,
       session: deliverySession,
       maxTurns: 3,
-      signal: AbortSignal.timeout(Math.min(30000, remaining)),
+      signal: AbortSignal.timeout(Math.min(DELIVERY_WINDOW_MS, remaining)),
     });
     const failures = p.ctx.outboundInputFailures?.count ?? 0;
     const repairRemaining = (p.ctx.runDeadlineAt ?? Date.now()) - Date.now();
@@ -372,6 +400,10 @@ async function finalizeRequest(
     return settle(p.deps, p.ctx, result);
   } catch (error) {
     if (!(error instanceof Error) || /Guardrail/.test(error.name)) throw error;
+    p.deps.logger.warn(
+      { inputRef: p.ctx.sourceMessageId, err: error.name, detail: error.message.slice(0, 300) },
+      'delivery stage failed',
+    );
     await p.deps.repos.traces.create({
       kind: 'gate',
       inputRef: p.ctx.sourceMessageId,
@@ -382,6 +414,7 @@ async function finalizeRequest(
         gate: 'delivery_stage',
         decision: 'failed',
         errorKind: error.name,
+        detail: error.message.slice(0, 200),
         ...(error instanceof z.ZodError
           ? {
               issues: error.issues.map((issue) => ({
@@ -425,6 +458,22 @@ async function respondRequestStatus(
     return { kind: 'completed', toolsCalled: [] };
   }
   p.ctx.isRequestStatusRun = true;
+  // Whether to post is decided by value to the asker, not by whether work was done: an unsolicited
+  // "could not complete" in a group helps nobody (2026-10-20 joint run).
+  const fixedStatus = renderRequestStatus(p.ctx);
+  if (fixedStatus && !hasStatusValue(p.ctx, fixedStatus)) {
+    p.ctx.isRequestStatusRun = false;
+    p.ctx.replySuppressed = true;
+    await p.deps.repos.traces.create({
+      kind: 'gate',
+      inputRef: p.ctx.sourceMessageId,
+      phase: p.ctx.phase,
+      latencyMs: 0,
+      costMicro: 0,
+      output: { gate: 'request_status', decision: 'suppressed', reason: 'no_value_for_group' },
+    });
+    return { kind: 'completed', toolsCalled: [] };
+  }
   await p.deps.repos.traces.create({
     kind: 'gate',
     inputRef: p.ctx.sourceMessageId,

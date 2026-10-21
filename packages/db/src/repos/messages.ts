@@ -56,6 +56,24 @@ export function messagesRepo(prisma: PrismaClient) {
         take: 50,
       });
     },
+    /** Recent public messages of one group across all members, newest first; redacted rows are skipped. */
+    recentInGroup(
+      groupId: string,
+      p: { limit: number; sinceHours: number; before?: Date },
+    ): Promise<Message[]> {
+      return prisma.message.findMany({
+        where: {
+          groupId,
+          text: { not: '' },
+          receivedAt: {
+            gte: new Date(Date.now() - p.sinceHours * 3600e3),
+            ...(p.before ? { lt: p.before } : {}),
+          },
+        },
+        orderBy: { receivedAt: 'desc' },
+        take: Math.min(Math.max(1, p.limit), 100),
+      });
+    },
     async redactOlderThan(days: number): Promise<number> {
       const r = await prisma.message.updateMany({
         where: {

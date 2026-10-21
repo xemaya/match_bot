@@ -8,10 +8,15 @@ export const testPrisma = new PrismaClient({ adapter: new PrismaPg({ connectionS
 class Rollback extends Error {}
 export async function withTestDb(fn: (tx: PrismaClient) => Promise<void>): Promise<void> {
   try {
-    await testPrisma.$transaction(async (tx) => {
-      await fn(tx as unknown as PrismaClient);
-      throw new Rollback();
-    });
+    // An e2e conversation runs several agent turns inside one transaction; Prisma's 5s default
+    // expires under a fully parallel suite.
+    await testPrisma.$transaction(
+      async (tx) => {
+        await fn(tx as unknown as PrismaClient);
+        throw new Rollback();
+      },
+      { timeout: 60000, maxWait: 15000 },
+    );
   } catch (e) {
     if (!(e instanceof Rollback)) throw e;
   }

@@ -186,6 +186,8 @@ describe('execution research checkpoints', () => {
       demand: { category: 'second_hand', confidence: 1 },
       isActionable: true,
     };
+    // A direct ask: do_nothing is pushed back for an answer, so a second model turn follows.
+    f.ctx.addressedToBot = true;
     const pending = runner.run(agent, '找书桌', { context: f.ctx, maxTurns: 3 });
     for (let attempt = 0; attempt < 50 && !release; attempt++)
       await new Promise((resolve) => setTimeout(resolve, 5));

@@ -283,3 +283,20 @@ it('targeted retains unavailable-fact-check fallback and rate limits', async () 
   d.repos.outbound.countSentToTargetSince.mockResolvedValue(1);
   expect(await decideForOutbound(d as never, direct(), draft)).toBe('review');
 });
+
+describe('JEV_POLICY=off', () => {
+  it('posts in Phase 2 on code gates alone without consulting Jev, and still respects the rate limit', async () => {
+    const d = deps();
+    d.env = { OUTBOUND_UNSURE_ACTION: 'drop', JEV_POLICY: 'off' } as never;
+    const c = ctx(2);
+    expect(await decideForOutbound(d as never, c, draft)).toBe('auto');
+    expect(d.evaluateOutbound).not.toHaveBeenCalled();
+    const trace = d.repos.traces.create.mock.calls.find(
+      (call) => (call[0] as { output: { gate?: string } }).output.gate === 'outbound',
+    )![0] as { output: { policy?: string; decision: string } };
+    expect(trace.output.policy).toBe('off');
+    const limited = { ...ctx(2), rateLimitPerDay: 1 } as never;
+    d.repos.outbound.countSentToTargetSince.mockResolvedValueOnce(1);
+    expect(await decideForOutbound(d as never, limited, { ...draft, text: 'other' })).toBe('drop');
+  });
+});

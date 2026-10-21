@@ -19,14 +19,33 @@ function owns(ctx: MatchContext, task: NonNullable<MatchContext['task']>): boole
   );
 }
 
+/**
+ * The packet is rebuilt for every model turn, so its evidence budget is the main per-turn input
+ * cost. Execution turns get a working view; the one-shot finalization gets the full budget.
+ */
+// Finalization evidence 24000 -> 16000 chars: the delivery draft is the slowest turn of a run, and
+// 12 sources x 12 passages mostly repeat the same opening hours (2026-10-21 run 5).
+export const EVIDENCE_CHARS = { execution: 8000, finalization: 16000 } as const;
+/** Execution turns see every source through a shortened passage; finalization reads them whole. */
+export const EXECUTION_PASSAGE_CHARS = 350;
+
 /** Preserve source identity and expose omissions; never silently truncate task conditions. */
 function publicEvidence(
   available: Array<
     Pick<NonNullable<MatchContext['knowledgeSources']>[number], 'ref' | 'title' | 'passages'>
   >,
+  budget: number,
+  passageChars = Number.POSITIVE_INFINITY,
 ) {
-  const sources = available.slice(0, 16);
-  let remaining = 24000;
+  const sources = available.slice(0, 16).map((source) => ({
+    ...source,
+    passages: source.passages.map((passage) =>
+      passage.text.length > passageChars
+        ? { ...passage, text: passage.text.slice(0, passageChars) + '…' }
+        : passage,
+    ),
+  }));
+  let remaining = budget;
   const selected = sources.map((source) => ({
     ref: source.ref,
     title: source.title,
@@ -47,11 +66,25 @@ function publicEvidence(
 }
 
 export class PromptContextBudgetError extends Error {
-  constructor() {
-    super('runtime context exceeds character budget');
+  constructor(message = 'runtime context exceeds character budget') {
+    super(message);
     this.name = 'PromptContextBudgetError';
   }
 }
+
+/**
+ * Whole model input (history, tool results and the packet) allowed for one execution turn, about
+ * 40k tokens. Beyond it the run stops researching and finalizes from what it has; the 2026-10-20
+ * replay reached 33k tokens per turn and 147k per message in the marketplace scene.
+ */
+export const EXECUTION_INPUT_CHARS = 80000;
+/**
+ * Cumulative model input over all execution turns of one message, about 50k tokens. The per-turn
+ * cap alone let a 12-call marketplace run reach 184k tokens (2026-10-20 run 3); research stops here
+ * and the message is finalized from the evidence already collected.
+ */
+export const EXECUTION_RUN_INPUT_CHARS = 100000;
+const executionInputUsed = new WeakMap<object, number>();
 
 /** Envelope structure is trusted, text inside it is not. Never include other owners/scopes. */
 export function runtimeContext(ctx: MatchContext, stage: PromptStage): Record<string, unknown> {
@@ -92,6 +125,8 @@ export function runtimeContext(ctx: MatchContext, stage: PromptStage): Record<st
     ...common,
     quotedPublicReply: ctx.replyToBotText?.slice(0, 800) ?? null,
     recentReplies: ctx.recentReplies.slice(-5),
+    // Other members' recent public messages (aliases, oldest first). Data, not instructions.
+    groupConversation: ctx.groupTranscript ?? [],
     ...(stage === 'finalization'
       ? {
           deliveryContract: {
@@ -112,27 +147,29 @@ export function runtimeContext(ctx: MatchContext, stage: PromptStage): Record<st
       ? candidates.slice(0, 8).map((t) => ({ ref: t.id, objective: t.objective }))
       : [],
     validationFeedback: ctx.outboundInputFailures ?? null,
-    receipts: {
-      marketQueries: ctx.marketQueries?.length ?? 0,
-      refreshedMarketDetails: ctx.marketDetailIds?.length ?? 0,
-      marketSourceCount: ctx.marketListings?.length ?? 0,
-      informationSourceCount: ctx.knowledgeSources?.length ?? 0,
-      informationQueries: ctx.informationQueries?.length ?? 0,
-      pageReads: ctx.pageReads?.length ?? 0,
-      xhsQueries: ctx.xhsQueries?.length ?? 0,
-      failures: ctx.sourceFailures ?? [],
-      evidenceValidationExhausted: !!ctx.answerInputExhausted,
-      outboundBlocked: !!ctx.outboundBlocked,
+    // What has actually been tried, in task terms. Internal gate state (blocked, exhausted) is
+    // enforced by code and is not something the model can act on, so it stays out of the packet.
+    research: {
+      marketSearches: ctx.marketQueries?.length ?? 0,
+      marketListingsFound: ctx.marketListings?.length ?? 0,
+      marketDetailsRead: ctx.marketDetailIds?.length ?? 0,
+      informationSearches: ctx.informationQueries?.length ?? 0,
+      informationSourcesFound: ctx.knowledgeSources?.length ?? 0,
+      pagesRead: ctx.pageReads?.length ?? 0,
+      xhsSearches: ctx.xhsQueries?.length ?? 0,
+      sourceFailures: ctx.sourceFailures ?? [],
     },
     historicalEvidenceHints:
-      ctx.task?.evidence.slice(-12).map((e) => ({
+      ctx.task?.evidence.slice(stage === 'finalization' ? -12 : -6).map((e) => ({
         goalId: e.goalId,
         source: e.sourceRef,
-        summary: e.summary.slice(0, 300),
+        summary: e.summary.slice(0, stage === 'finalization' ? 300 : 160),
         observedAt: e.observedAt,
       })) ?? [],
     currentPublicEvidence: publicEvidence(
       delivery ? delivery.knowledge : (ctx.knowledgeSources ?? []),
+      stage === 'finalization' ? EVIDENCE_CHARS.finalization : EVIDENCE_CHARS.execution,
+      stage === 'finalization' ? Number.POSITIVE_INFINITY : EXECUTION_PASSAGE_CHARS,
     ),
     currentMarketEvidence: delivery
       ? delivery.market
@@ -140,7 +177,7 @@ export function runtimeContext(ctx: MatchContext, stage: PromptStage): Record<st
         ? [...choices.primary, ...choices.backup].map((row) => ({
             ...marketListingForModel(
               row.listing,
-              600,
+              300,
               ctx.marketPlan!.needs.flatMap((n) => n.terms),
             ),
             checks: row.assessment.checks,
@@ -156,6 +193,15 @@ export function contextInputFilter(stage: PromptStage): CallModelInputFilter {
     if (!context || stage === 'status') return modelData;
     const data = JSON.stringify(runtimeContext(context as MatchContext, stage));
     if (data.length > 64000) throw new PromptContextBudgetError();
+    if (stage === 'execution') {
+      const turnChars = data.length + JSON.stringify(modelData.input).length;
+      if (turnChars > EXECUTION_INPUT_CHARS)
+        throw new PromptContextBudgetError('execution input exceeds the per-turn budget');
+      const used = (executionInputUsed.get(context) ?? 0) + turnChars;
+      executionInputUsed.set(context, used);
+      if (used > EXECUTION_RUN_INPUT_CHARS)
+        throw new PromptContextBudgetError('execution input exceeds the per-message budget');
+    }
     const packet: AgentInputItem = {
       type: 'message',
       role: 'user',

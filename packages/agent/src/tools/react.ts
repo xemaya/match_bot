@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { AgentDeps } from '../context.js';
+import { REACT } from '../prompts/tools/react.js';
 import { makeOutboundTool } from './make-outbound-tool.js';
 
 /** Telegram 允许 bot 使用的反应表情里，挑几个适合「收到 / 不客气」的。 */
@@ -12,8 +13,7 @@ export const REACTION_EMOJI = ['👍', '🙏', '❤', '👌'] as const;
 export function reactTool(deps: AgentDeps) {
   return makeOutboundTool(deps, {
     name: 'react',
-    description:
-      'Adds an emoji reaction to the user\'s message instead of replying with text. Use it when the user just thanks you or acknowledges ("thanks", "ok", "got it") and nothing else needs saying.',
+    description: REACT.description,
     parameters: z.object({ emoji: z.enum(REACTION_EMOJI) }),
     toDraft: (ctx, args: { emoji: (typeof REACTION_EMOJI)[number] }) =>
       Promise.resolve(
@@ -26,7 +26,7 @@ export function reactTool(deps: AgentDeps) {
               inputRef: ctx.sourceMessageId,
               replyToMessageId: ctx.source.messageId,
             }
-          : { error: 'cannot react: the message id is unknown' },
+          : { error: REACT.feedback.unknownMessage },
       ),
   });
 }

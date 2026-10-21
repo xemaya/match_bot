@@ -20,6 +20,7 @@ import type { CurrentRequest } from './current-request.js';
 import type { KnowledgeSource } from './knowledge-evidence.js';
 import type { MarketPlan } from './market-strategy.js';
 import type { MarketCandidate, MarketResearchQuery } from './market-research.js';
+import type { GroupLine } from './group-context.js';
 
 /** 一次 run 的上下文。Session 粒度是用户；群上下文与开放需求经这里 + instructions 注入。 */
 export interface MatchContext {
@@ -42,6 +43,8 @@ export interface MatchContext {
   replyToBotText?: string;
   replyToMessageId?: string;
   requestCategory?: DemandCategory;
+  /** Recent public group conversation (aliases only), oldest first; loaded by the pipeline for group messages. */
+  groupTranscript?: GroupLine[];
   /** Server-selected, owner/scope-checked task; never accept an arbitrary model-provided snapshot. */
   task?: UserTask;
   taskCandidates?: UserTask[];

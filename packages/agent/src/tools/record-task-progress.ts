@@ -18,35 +18,35 @@ import { evaluateSourceSupport } from '@matchbot/jev';
 import { hashText } from '@matchbot/shared';
 import { marketChoiceFeedback } from '../market-choice-feedback.js';
 import { TASK_SOURCE_REVIEW_LIMITS } from '../task-source-budget.js';
+import { RECORD_TASK_PROGRESS } from '../prompts/tools/record-task-progress.js';
 
 /** Source/plan ledger only; sending still uses the original outbound tool and gates. */
 export function recordTaskProgressTool(deps: AgentDeps) {
   return tool({
     name: 'record_task_progress',
-    description:
-      'Record verified source evidence and a responsible next step for the selected task. Use known goal/criterion IDs and source refs. Exact source text may be supplied with status=unknown: the server then checks both support and contradiction, keeping missing/ambiguous/unavailable evidence unknown. Each criterion describes the best coherent option; do not mix rejected alternatives into supporting evidence. Prefer returned passage IDs with quote=null. For a whole-source ref, quote=null selects a bounded server-owned excerpt and still runs semantic/computed checks; supply an exact quote when the relevant fact is deeper in a long source. Never combine different offers, treat public status as guaranteed availability, or mark the user goal complete. Choose research for public facts your tools can retrieve; ask_user only for a missing personal condition or decision that changes your next action. Record internal checks without turning them into a public checklist. Use wait_source only after a real failure, or deliver the useful findings with concrete unknowns. This sends nothing.',
+    description: RECORD_TASK_PROGRESS.description,
     parameters: taskProgressParameters,
     needsApproval: false,
     errorFunction: async (rc) => {
       const ctx = rc.context as MatchContext;
       ctx.taskProgressCalls = (ctx.taskProgressCalls ?? 0) + 1;
       await trace(deps, ctx, 'invalid_schema');
-      return 'invalid task progress: use the small checks/next schema and known IDs; unknown checks use sources=[]';
+      return RECORD_TASK_PROGRESS.feedback.invalidSchema;
     },
     execute: async (args, rc, details) => {
       const ctx = (rc as RunContext<MatchContext>).context;
       ctx.taskProgressCalls = (ctx.taskProgressCalls ?? 0) + 1;
       if (ctx.taskProgressCalls > 4) {
         await trace(deps, ctx, 'budget_exhausted');
-        return 'task progress budget exhausted; provide the best honest partial answer or request status';
+        return RECORD_TASK_PROGRESS.feedback.budgetExhausted;
       }
       if (ctx.outboundBlocked) {
         await trace(deps, ctx, 'outbound_declined');
-        return 'not allowed: outbound already declined';
+        return RECORD_TASK_PROGRESS.feedback.blocked;
       }
       if (ctx.runDeadlineAt !== undefined && Date.now() >= ctx.runDeadlineAt) {
         await trace(deps, ctx, 'deadline');
-        return 'research deadline reached; do not start another review';
+        return RECORD_TASK_PROGRESS.feedback.deadlineBeforeReview;
       }
       try {
         const progress = buildTaskProgress({ ctx, ...args });
@@ -60,9 +60,7 @@ export function recordTaskProgressTool(deps: AgentDeps) {
             ...(args.next.goalId ? { goalId: args.next.goalId } : {}),
           })
         )
-          throw new TaskTransitionError(
-            'This personal condition is already known. Use it; choose research for public gaps or deliver useful findings, not another question.',
-          );
+          throw new TaskTransitionError(RECORD_TASK_PROGRESS.feedback.alreadyKnown);
         const reviews = await reviewSources(deps, ctx, args.checks);
         const checked = applySourceReviews(progress.checks, reviews.decisions);
         progress.checks = checked.checks;
@@ -70,7 +68,7 @@ export function recordTaskProgressTool(deps: AgentDeps) {
         progress.coherence = await reviewCoherence(deps, ctx, progress);
         if (ctx.runDeadlineAt !== undefined && Date.now() >= ctx.runDeadlineAt) {
           await trace(deps, ctx, 'deadline');
-          return 'research deadline reached; do not continue or save obsolete work';
+          return RECORD_TASK_PROGRESS.feedback.deadlineAfterReview;
         }
         const current = ctx.task!;
         const candidate = recordTaskProgress({ task: current, ...progress });
@@ -79,10 +77,7 @@ export function recordTaskProgressTool(deps: AgentDeps) {
           progress.nextStep = {
             action: 'research',
             owner: 'agent',
-            reason: (
-              'New hard conditions need a focused fresh query before delivery: ' +
-              missingResearch.join(', ')
-            ).slice(0, 500),
+            reason: RECORD_TASK_PROGRESS.feedback.freshQueryNeeded(missingResearch),
           };
         }
         const result = await deps.repos.tasks.recordProgress({
@@ -102,7 +97,7 @@ export function recordTaskProgressTool(deps: AgentDeps) {
         });
         if (result.kind !== 'applied' && result.kind !== 'replayed') {
           await trace(deps, ctx, 'version_conflict');
-          return 'task changed while researching; do not overwrite or answer using obsolete conditions';
+          return RECORD_TASK_PROGRESS.feedback.versionConflict;
         }
         ctx.task = result.task;
         ctx.taskProgressVersion = result.task.requirementsVersion;
@@ -149,11 +144,10 @@ export function recordTaskProgressTool(deps: AgentDeps) {
                 ...(ctx.knowledgeSources ?? []).map((s) => s.ref),
                 ...(ctx.xhsNotes ?? []).filter((n) => n.isDetailLoaded).map((n) => n.ref),
               ],
-              passages:
-                'Use only exact passage IDs already returned by search_information or xhs_read_notes; quote=null copies their text on the server.',
-              next: 'Use an actual returned ref and quote. Unproved checks stay unknown with sources=[]. Do not repeat the same rejected check. Useful partial answers may go directly to reply_to_request; they still pass source and outbound checks.',
+              passages: RECORD_TASK_PROGRESS.results.passages,
+              next: RECORD_TASK_PROGRESS.results.next,
             })
-          : 'task progress could not be saved; stop and explain the current processing gap';
+          : RECORD_TASK_PROGRESS.feedback.notSaved;
       }
     },
   });
@@ -224,18 +218,22 @@ async function reviewCoherence(
     sourceId: 'validated_facts',
     quote: goal.title,
   }));
-  const response = await evaluateSourceSupport(deps.jev, {
-    taskContext:
-      'Current date (Europe/London): ' +
-      new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(new Date()) +
-      '\n' +
-      (ctx.currentRequest?.text ?? proposed.objective),
-    claims,
-    sources: [{ id: 'validated_facts', text: sourceText }],
-    inputRef: ctx.sourceMessageId,
-    phase: ctx.phase,
-    ...(ctx.runDeadlineAt !== undefined ? { deadlineAt: ctx.runDeadlineAt } : {}),
-  });
+  // JEV_POLICY=off: the facts were already validated by code; there is no second-opinion model.
+  const response =
+    deps.env?.JEV_POLICY === 'off'
+      ? { ok: true as const, scores: ready.map(() => 1) }
+      : await evaluateSourceSupport(deps.jev, {
+          taskContext:
+            'Current date (Europe/London): ' +
+            new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' }).format(new Date()) +
+            '\n' +
+            (ctx.currentRequest?.text ?? proposed.objective),
+          claims,
+          sources: [{ id: 'validated_facts', text: sourceText }],
+          inputRef: ctx.sourceMessageId,
+          phase: ctx.phase,
+          ...(ctx.runDeadlineAt !== undefined ? { deadlineAt: ctx.runDeadlineAt } : {}),
+        });
   if (response.ok) {
     for (const [index, goal] of ready.entries())
       if ((response.scores[index] ?? 0) >= deps.thresholds.T_SOURCE_SUPPORT_ACCEPT)
@@ -323,6 +321,15 @@ async function reviewSources(
       .slice(0, remaining);
     if (batch.length) {
       ctx.taskSourceReviewedClaims = (ctx.taskSourceReviewedClaims ?? 0) + batch.length;
+      if (deps.env?.JEV_POLICY === 'off') {
+        // No second-opinion model. A claim the server's own condition check already agrees with
+        // (budget, area, date) stands; anything else stays unknown, never flipped by fiat.
+        // 2026-10-20: discarding the code-verified claims too made record_task_progress a wasted
+        // turn under JEV off, since no offer could ever leave the "unverified" backup list.
+        for (const item of batch)
+          ctx.sourceReviewCache[item.key] = review.computedAgrees[item.index] ?? false;
+        continue;
+      }
       const response = await evaluateSourceSupport(deps.jev, {
         taskContext:
           'Current date (Europe/London): ' +

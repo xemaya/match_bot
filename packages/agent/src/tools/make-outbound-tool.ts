@@ -10,6 +10,7 @@ import {
   formatOutboundText,
   type OutboundDraftInput,
 } from './outbound-gate.js';
+import { OUTBOUND } from '../prompts/tools/outbound.js';
 
 export type DraftResult =
   OutboundDraftInput | { error: string; kind?: 'research_required' | 'no_new_help' };
@@ -47,11 +48,7 @@ export function makeOutboundTool<A>(
   };
   const toArgs = (raw: unknown): A => cfg.parameters.parse(raw) as A;
   const toDraft = async (ctx: MatchContext, args: A): Promise<DraftResult> => {
-    if (hasUnsupportedModelAction(args))
-      return {
-        error:
-          'invalid answer: no background monitoring or contact/booking action was performed or scheduled. Give a useful action the user can take now; do not promise later monitoring or invent a completed action.',
-      };
+    if (hasUnsupportedModelAction(args)) return { error: OUTBOUND.feedback.unsupportedAction };
     try {
       const draft = await cfg.toDraft(ctx, args);
       if ('error' in draft) return draft;
@@ -64,8 +61,7 @@ export function makeOutboundTool<A>(
   };
   // SDK 在敏感信息关闭时会清掉 InvalidToolInputError 的原始参数/原因；先保存字段路径与限值。
   // 不保存参数值，不写日志/快照。每个工具独立，批量无效调用的错误一并供模型修正。
-  const retryLimitMessage =
-    'not sent: outbound input retry limit reached after three failed calls. Stop; do not retry.';
+  const retryLimitMessage = OUTBOUND.feedback.retryLimit;
   // 同一个 SDK call 在 needsApproval 和 execute 都经过校验，只算一次失败。
   const rejectedCalls = new WeakMap<MatchContext, Map<string, string>>();
   const schemaFeedback = new WeakMap<MatchContext, Set<string>>();
@@ -77,9 +73,9 @@ export function makeOutboundTool<A>(
       if ((rc.context as MatchContext).outboundBlocked) return retryLimitMessage;
       if (error instanceof Error && error.name === 'InvalidToolInputError') {
         const feedback = schemaFeedback.get(rc.context as MatchContext);
-        return `invalid tool input: ${feedback ? [...feedback].join('; ') : 'arguments do not match the tool schema'}. Correct the listed fields; do not repeat identical arguments.`;
+        return OUTBOUND.feedback.invalidInput(feedback ? [...feedback].join('; ') : undefined);
       }
-      return 'tool failed: internal error; stop rather than repeating this action';
+      return OUTBOUND.feedback.internalError;
     },
     needsApproval: async (rc, args, callId) => {
       const ctx = rc.context as MatchContext;
@@ -127,16 +123,15 @@ export function makeOutboundTool<A>(
       return decision === 'review';
     },
     execute: async (args, rc, details) => {
-      if (!rc) return 'internal error: missing run context';
+      if (!rc) return OUTBOUND.feedback.missingContext;
       const ctx = (rc as RunContext<MatchContext>).context;
-      if (await recordQuietEnd(ctx))
-        return 'not sent: this supplement intentionally ended without a new reply';
+      if (await recordQuietEnd(ctx)) return OUTBOUND.feedback.supplementEnded;
       if (!cfg.isRequestStatus && ctx.answerInputExhausted && !ctx.isAnswerFinalization)
         return retryLimitMessage;
       if (!cfg.isRequestStatus && ctx.outboundBlocked) {
         return ctx.outboundInputFailures?.count === 3
           ? retryLimitMessage
-          : 'not sent: this run was already declined by the outbound gate. Stop; do not retry.';
+          : OUTBOUND.feedback.alreadyDeclined;
       }
       const callId = details?.toolCall?.callId;
       const rejection = callId ? rejectedCalls.get(ctx)?.get(callId) : undefined;
@@ -181,6 +176,7 @@ export function makeOutboundTool<A>(
         tool: cfg.name,
         decision: 'continue',
         reason: 'research_required',
+        feedback: draft.error.slice(0, 240),
       },
       phase: ctx.phase,
       latencyMs: 0,

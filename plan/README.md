@@ -1,4 +1,6 @@
-P46：测试方案、真实Bot/群身份与跨机器交接完成，凭证私下迁移，见 [交接文档](../docs/testing/telegram-lab-handoff.md) 和 [工作包](./P46-portable-telegram-lab.md)。
+P48：提示词按读者分层（voice / policy / stages / tools），`pnpm prompt:audit` 把各阶段全文 dump 到 docs/prompts，`reply_to_request` 拆成群聊那句话 + 折叠证据卡，0.32.0；见 [P48-prompt-layers-and-chat-line.md](./P48-prompt-layers-and-chat-line.md)。
+
+2026-10-19：仓库内演员测试（P31 控制器、模拟用户、P33–P45 真实演员脚本、P46 交接）已移除，演员统一由独立项目 actor_bots 驱动，见 [演员测试](../docs/testing/actor-bots.md)。P31/P46 工作包与历史报告仅作记录。
 
 P45：0.30.0 人感/主动帮忙真实回归完成，394200生成token、6条消息均实质回复；保留GP审查腔和打印机主动性缺口，见 [报告](../docs/evaluations/2026-10-19-persona-telegram-regression.md)。
 
@@ -63,7 +65,7 @@ P36：Jev targeted 策略与本地无 Telegram 对话验证，Codex 本地实现
 
 | P30 | 续接竞争与无增量静默 | [P30-followup-race-and-quiet-replies.md](./P30-followup-race-and-quiet-replies.md) | P29 | 9 | codex | 完成 | 0.18.3：1035测试/12契约、PG竞争复现、重复草稿压制；模型失败留证，PR合并main生效 | 2026-10-17 |
 
-| P31 | Telegram多演员测试群 | [P31-telegram-actor-lab.md](./P31-telegram-actor-lab.md) | P30 | 10 | codex | 进行中 | SOUL v2已本地生效；三角色4条/4回复、351,908 token，预留停止；完整多轮与人感未通过 | 2026-10-18 |
+| P31 | Telegram多演员测试群 | [P31-telegram-actor-lab.md](./P31-telegram-actor-lab.md) | P30 | 10 | codex | 已移除 | 演员迁至 actor_bots；本仓库仅保留 TELEGRAM_ACTOR_ALLOWLIST 入站白名单 | 2026-10-19 |
 | P32 | 回答风格清理与主动承担 | [P32-conversation-style-cleanup.md](./P32-conversation-style-cleanup.md) | P31 | 7 | codex | 完成 | 0.20.0：1089测试/12契约；默认自然正文+来源，失败不派清单；模型预览限制留证 | 2026-10-18 |
 | P33 | 五场真实多轮验收 | [P33-live-multiturn-five-cases.md](./P33-live-multiturn-five-cases.md) | P32 | 8 | codex | 完成 | 五场13条实测结束；1935913token，产品质量未通过；报告见PR11 | 2026-10-18 |
 | P34 | 搜索接入与校验阻塞修复 | [P34-search-and-validation-repair.md](./P34-search-and-validation-repair.md) | P33 | 8 | codex | 完成 | 0.21.1修复；原始搜索AB6组；真实回归3条，仍有失败 | 2026-10-18 |
@@ -72,6 +74,7 @@ P36：Jev targeted 策略与本地无 Telegram 对话验证，Codex 本地实现
 | P39 | 新生成模型与Telegram回归 | [P39-model-provider-telegram-regression.md](./P39-model-provider-telegram-regression.md) | P38 | 8 | codex | 完成 | 0.26.1/gpt-6.1-sol low；264118token；6条均回复，任务质量未通过 | 2026-10-18 |
 | P41 | 研究停止与交付证据覆盖 | [P41-research-delivery.md](./P41-research-delivery.md) | P39 | 8 | codex | 完成 | 经PR19合并；真实回归见P43，不等于完整任务通过 | 2026-10-19 |
 | P43 | 网页核验Telegram回归 | [P43-web-telegram-regression.md](./P43-web-telegram-regression.md) | P42 | 8 | codex | 完成 | 0.29.0；401145token/6条均回复；8读页6成功，保留缺口 | 2026-10-19 |
+| P48 | 提示词分层目录、群聊发言与证据卡拆分 | [P48-prompt-layers-and-chat-line.md](./P48-prompt-layers-and-chat-line.md) | 0.31.0 工作树 | 11 | claude | 评审中 | 0.32.0：voice/policy/stages/tools 目录、prompt:audit 全文 dump、text+details 折叠证据卡 | 2026-10-21 |
 
 ## 波次与并行
 

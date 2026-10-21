@@ -60,6 +60,13 @@ export async function checkMarketOfferConflicts(
     const remaining = TASK_SOURCE_REVIEW_LIMITS.claims - (ctx.taskSourceReviewedClaims ?? 0);
     if (pending.length > remaining) return finish({ kind: 'incomplete', reason: 'budget' });
     ctx.taskSourceReviewedClaims = (ctx.taskSourceReviewedClaims ?? 0) + pending.length;
+    if (deps.env?.JEV_POLICY === 'off') {
+      // These are refutation claims (true = the source explicitly contradicts a hard condition).
+      // Without a second-opinion model nothing is established either way, so no offer is marked
+      // conflicting; the code checks and the honest-unknown rules in delivery stand alone.
+      for (const r of pending) ctx.sourceReviewCache[r.key] = false;
+      continue;
+    }
     const response = await evaluateSourceSupport(deps.jev, {
       taskContext: ctx.currentRequest?.text ?? ctx.task.objective,
       claims: pending.map((r) => r.claim),

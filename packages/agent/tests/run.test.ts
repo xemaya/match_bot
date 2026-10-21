@@ -77,6 +77,9 @@ const ctx = (phase: 0 | 1 | 2) => ({
   phase: phase as 0,
   recentReplies: [] as string[],
   sourceMessageId: 'm1',
+  // These contracts describe a member talking to the assistant; an unsolicited group message
+  // gets no fixed status or empty "unavailable" (see reply-value.test.ts).
+  addressedToBot: true,
 });
 
 const replyCall = (callId = 'c1') =>
@@ -190,6 +193,29 @@ describe('runInbound', () => {
     expect(deps.evaluateOutbound).not.toHaveBeenCalled();
     expect(
       repos.traces.create.mock.calls.some((c) => JSON.stringify(c).includes('agent_noop')),
+    ).toBe(true);
+  });
+  it('stays silent when an ambiguous follow-up did not address the bot', async () => {
+    const model = new ScriptedModel([
+      [functionCall('clarify_task', { reason: 'ambiguous_reference' }, { callId: 'clarify' })],
+    ]);
+    const { deps, repos } = makeDeps(model);
+    const result = await runInbound({
+      deps: {
+        ...deps,
+        answerRequests: true,
+        taskRequests: true,
+        repos: { ...repos, tasks: { findOpenByScope: () => Promise.resolve([]) } },
+      } as never,
+      ctx: { ...ctx(2), addressedToBot: false },
+      input: '@小陆 能连最好啦 不能也行 便宜就成',
+    });
+    expect(result).toEqual({ kind: 'completed', toolsCalled: [] });
+    expect(repos.outbound.create).not.toHaveBeenCalled();
+    expect(
+      repos.traces.create.mock.calls.some((c) =>
+        JSON.stringify(c).includes('ambiguous_unsolicited'),
+      ),
     ).toBe(true);
   });
   it('reports a planning failure instead of silently swallowing a direct short supplement', async () => {
@@ -1609,7 +1635,7 @@ it.each([false, true])(
 
 it('uses bounded finalization after the research turn budget instead of dropping collected work', async () => {
   const model = new ScriptedModel([
-    ...Array.from({ length: 12 }, (_, i) => [
+    ...Array.from({ length: 8 }, (_, i) => [
       functionCall('do_nothing', { reason: 'still deciding' }, { callId: 'noop-' + i }),
     ]),
     [

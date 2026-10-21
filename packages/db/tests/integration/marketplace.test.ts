@@ -100,7 +100,9 @@ describe('supplies', () => {
         expiresAt: new Date(Date.now() + 86400e3).toISOString(),
         sourceMessageId: 'm2',
       });
-      expect(await r.supplies.findActive('man_and_van')).toHaveLength(1);
+      expect(await r.supplies.findActive('man_and_van', g.id)).toHaveLength(1);
+      const other = await r.groups.upsert({ channel: 'telegram', externalId: '-2', name: 'other' });
+      expect(await r.supplies.findActive('man_and_van', other.id)).toHaveLength(0);
     });
   });
 });

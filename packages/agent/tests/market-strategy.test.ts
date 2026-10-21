@@ -26,6 +26,40 @@ const plan: MarketPlan = {
   requiredArea: ['E14'],
 };
 describe('source-grounded market strategy', () => {
+  it('reads a thousands separator in a monthly rent', () => {
+    const result = assessMarketListing(
+      { ...listing('出租：West Ham E16 Ensuite\n租金：£1,230/月'), title: '伦敦合租' },
+      {
+        intent: 'housing',
+        needs: [{ id: 'room', terms: ['合租', 'ensuite'] }],
+        preferences: [],
+        budget: 1000,
+        budgetUnit: 'month',
+      },
+    );
+    expect(result.itemPriceGBP).toEqual({ min: 1230, max: 1230 });
+    expect(result.checks.find((c) => c.label === 'budget')?.status).toBe('mismatch');
+  });
+  it.each([
+    ['出租：Stratford E15 单间\n租金：£850/月', 'met'],
+    ['出租：Hackney 单间 近地铁\n租金：£900/月', 'met'],
+    ['地点：E3 Bow Road', 'met'],
+    ['出租：Clapham SW4 单间\n租金：£800/月', 'mismatch'],
+    ['出租：东伦敦 SE12 单间\n租金：£700/月', 'unknown'],
+    ['出租：单间 近地铁\n租金：£800/月', 'unknown'],
+  ] as const)('reads 东伦敦 as E postcodes and east districts: %s → %s', (description, status) => {
+    const result = assessMarketListing(
+      { ...listing(description), title: '伦敦合租' },
+      {
+        intent: 'housing',
+        needs: [{ id: 'room', terms: ['单间', '合租'] }],
+        preferences: [],
+        budget: 1000,
+        requiredArea: ['东伦敦'],
+      },
+    );
+    expect(result.checks.find((c) => c.label === 'area')?.status).toBe(status);
+  });
   it.each([
     ['租金：£465pw', 'month', 'mismatch'],
     ['租金：周租£465', 'month', 'mismatch'],

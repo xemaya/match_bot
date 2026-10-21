@@ -1,73 +1,66 @@
-# Prompt architecture v1
+# Prompt architecture v2（P48）
 
-生产入口仍是 `createMatchAgent`，不增加 agent 数量、模型调用或外部权限。
+生产入口仍是 `createMatchAgent`，不增加 agent 数量、模型调用或外部权限。v1（P37）只管理了系统指令；v2 把模型实际读到的五层文本全部归到一处，按**读者**组织，并用 `pnpm prompt:audit` 把每阶段的全文 dump 到 `docs/prompts/` 供人阅读。
 
 ```text
-稳定规则 rules.ts + 纯风格 SOUL.md
-                   ↓
-场景定义 scenes.ts → 工作流 + 工具白名单
-                   ↓
-规划协议 / 执行协议 / 独立收尾协议 / 固定状态协议
-                   ↓
-真实可用工具与指令引用校验 → 模型
-                   ↑
-每次调用刷新的 user-role JSON 上下文 + 原始用户输入 + 工具结果
+packages/agent/prompts/voice/        写给群友读的那一层（中文散文，运行时整段读入）
+  soul.md                            气质：怎么待人
+  chat-line.md                       群聊发言规范：那句话和证据卡各写什么、多长
+
+packages/agent/src/prompts/
+  voice.ts                           读入上面两个文件；为空即启动失败
+  policy/rules.ts                    TRUST / FACT / DELIVERY：只留模型真要判断的，代码已强制的不写
+  policy/scenes.ts                   场景工作流 + 工具白名单 + 路由
+  stages/index.ts                    阶段矩阵：每阶段注入哪些层；composeStagePrompt 固定顺序
+  stages/{triage,plan,research,write,status,legacy}.ts   各阶段协议文本
+  tools/<tool>.ts                    每个生产工具的 description、参数说明、拒稿反馈
+  tools/index.ts                     审计索引 TOOL_PROMPTS
+  runtime-context.ts                 每轮刷新的 user-role JSON 数据包
+  tool-contract.ts                   实际启用的工具与指令引用交叉校验
 ```
 
-## 维护归属
+## 五层与归属
 
-| 内容                               | 位置与责任                                                                                 |
-| ---------------------------------- | ------------------------------------------------------------------------------------------ |
-| 风格                               | `SOUL.md`；不含事实示例、搜索步骤、工具名或业务案例                                        |
-| 全局边界与事实原则                 | `rules.ts`；不因业务场景而弱化                                                             |
-| 场景流程                           | `scenes.ts`；目录服务、市场、一般信息、健康服务获取、官方手续/交通、生活活动、不支持的请求 |
-| 场景路由                           | `selectScene`；使用服务端绑定任务/类别及当前主题，不受来源正文控制；范围判定不等于新增授权 |
-| 工具开放                           | `tool-contract.ts`；生产构造时裁剪，直接 SDK 调用也通过 `isEnabled` 校验                   |
-| 参数格式与数值限制                 | 工具 Zod schema/实现；提示词不复制整份 schema                                              |
-| 引用、状态转移、所有权、审批、频控 | 现有领域代码与出站门，不能以提示词替代                                                     |
-| 来源语义支持                       | 现有 JEV 评价；本次不改阈值或评价问题集                                                    |
-| 运行时上下文                       | `runtime-context.ts`；用户消息、任务、原文、证据均不拼进系统指令                           |
-| 旧模式                             | `legacy-instructions.ts`；只用于未启用 answerRequests 的兼容调用者，不作为生产扩展点       |
+| 层             | 读者     | 位置                 | 规则                                                                 |
+| -------------- | -------- | -------------------- | -------------------------------------------------------------------- |
+| voice          | 群友     | `prompts/voice/*.md` | 中文；正面描述行为；长度规则**只**在 `chat-line.md` 出现一次         |
+| policy         | 模型判断 | `policy/rules.ts`    | 权限、审批、频控、引用校验由代码强制，不写进规则                     |
+| scene          | 模型流程 | `policy/scenes.ts`   | 新业务加场景，不往全局规则里追加失败案例                             |
+| stage protocol | 模型流程 | `stages/*.ts`        | 一个阶段一个文件；注入哪些层看 `stages/index.ts`，不在文件里自行拼装 |
+| tool text      | 模型     | `tools/<tool>.ts`    | description / 参数 describe / 拒稿反馈都从这里取；反馈先写"改成什么" |
 
-新增业务：增加/扩展场景定义、声明流程与工具，并增加独立路由/能力测试。
-不要把新的失败案例追加到全局规则。先辨别是实体归属、条件范围、时间语义、状态或工具契约的问题，再增加反例与必要的通用原则。
+## 阶段矩阵（`stages/index.ts`）
 
-## 输入及信任边界
+| 阶段     | 层                                  | 说明                                              |
+| -------- | ----------------------------------- | ------------------------------------------------- |
+| triage   | trust                               | 一次小调用判断这条群消息该不该管                  |
+| plan     | trust                               | 绑定任务，不写给人看                              |
+| research | trust, fact, delivery, scene, voice | 可以直接回复，所以带 voice                        |
+| write    | trust, fact, delivery, voice        | 只剩 `reply_to_request`，读证据包写那句话和证据卡 |
+| status   | （无）                              | 代码生成的固定状态                                |
+| legacy   | trust, fact, delivery, voice        | 未启用 answerRequests 的兼容调用者                |
 
-SDK `callModelInputFilter` 在每次生成前注入结构化 JSON 数据消息，role=user，不伪造 tool call。
-用户原始输入仍独立保留；固定消息 ID 由服务端创建，不根据正文识别，因此用户复制同名 JSON 不会被删除或提升权限。
-上下文每次从当前 `MatchContext` 重建，旧注入包会被替换；`session.addItems` 不持久化该包。
-使用 SDK 原生消息 ID，不把内部标记塞进 providerData；Chat Completions 线协议测试验证没有多余 API 字段。
+顺序固定：policy → 阶段协议（含场景）→ voice。voice 永远在最后，离生成最近。
 
-规划只接收同 owner/channel/chat 的候选任务。执行/收尾验证选中任务归属，不通过则报错。
-历史证据明确为 hints，不冒充当前引用；当前证据和搜索回执分开。来源文字仍是不可信数据。
-这降低指令与数据混淆，并不等于证明模型不会遭受提示词注入。
+## 两个产物
 
-候选任务超过 100 个或规划包超过 32,000 字符时先澄清；不会静默选最近一项。
-当前公开证据摘要采用跨来源轮询，正文总预算 24,000 字符；显式返回省略的 passage IDs。
-完整工具结果仍留在本次执行历史中。不会截断/删改用户任务硬条件；运行时包超过 64,000 字符报可追踪预算错误并走既有失败状态路径。
-这些是字符保护，不是模型 token 上限承诺；并未解决整个工具历史的总 token 管理。
+`reply_to_request` 的 `text` 是群里那句话（群 ≤3 行 150 字，私聊 ≤400 字，工具退回时反馈告诉模型把什么挪到 `details`），`details` 是折叠证据卡里的支撑细节（≤700 字）。代码把 `details`、市场候选块和来源行渲染成以 `【详情】` 开头的证据卡（`@matchbot/domain` 的 `renderEvidenceCard`），channel-telegram 把卡渲染成 `expandable_blockquote`，卡内来源仍是可点的 `text_link`。所有事实校验覆盖 `text` + `details`。
 
-## 阶段契约
+## 运行时数据包
 
-- 规划：只有建任务、更新、澄清和确认收到；无候选任务时不提供更新工具，提示词也不引用它。
-- 执行：按场景开放搜索工具；事实回答仍经过原有引用/JEV/审批/发送账本。
-- 收尾：只有 `reply_to_request`；读取当前条件、证据、未知项和回执，不能继续搜索或修改任务进度。输入明确该工具只接受 k/m 引用；仅有 XHS/旧 web 结果时不能伪造引用或声称没搜到，应说明本次未能完成回答。正常执行仍保留场景专用 XHS 回复工具。
-- 完成/取消/感谢：只有 react/do_nothing，不把所有业务搜索规则带入下一轮。
-- 固定状态：仍由代码生成；仅需审批快照时使用原 SDK 状态路径。
+与 v1 相同：SDK `callModelInputFilter` 每次生成前注入 role=user 的 JSON，用户原文独立保留，不持久化。v2 去掉了 `receipts` 计数器和内部布尔（`evidenceValidationExhausted`、`outboundBlocked`），改为面向任务的 `research` 摘要（搜了几次、找到几个来源、读了几页、来源故障）；门的状态由代码强制，不进模型包。
 
-系统提示词在模型调用前与实际启用的工具交叉校验。trace metadata 记录 promptArchitecture、promptStage、promptScene。
-AGENT_VERSION 已升至 0.24.0；旧待审批快照按已有版本校验拒绝跨版本恢复。没有升级 SDK，也没有删除用户数据。
-
-## 验证与限制
+## 审计
 
 ```sh
-node --import tsx scripts/local/prompt-audit.mts
-pnpm exec vitest run packages/agent/tests/prompt-architecture.test.ts packages/agent/tests/prompt-input.test.ts
+pnpm prompt:audit                      # 生成 docs/prompts/*.md，并检查字符预算
+pnpm exec vitest run packages/agent/tests/prompt-layers.test.ts packages/agent/tests/prompt-architecture.test.ts packages/agent/tests/prompt-input.test.ts
 ```
 
-测试验证每场景工具集合、缺失能力、收尾边界、正文不进系统提示词、跨用户/群过滤、SDK 多轮刷新/不持久化、Chat Completions 实际序列化，以及输入预算。
-冻结任务用例继续覆盖：多目标及每件预算（desk_chair）、同一对象的并列条件（cat_housing）、身份不等于技能（beginner_bad）、切换与歧义、所有权/会话隔离、交易方向及用户报告结果。
-买药、背景补充、短追问、日期、引用、数值和出站限制仍由原有工具/run 测试覆盖。
+`docs/prompts/README.md` 是阶段矩阵、文件索引和结构审计表；每个 `<stage>-<scene>.md` 是该阶段完整系统指令加注册工具的 description 与参数说明；`tools.md` 是全部拒稿反馈；`runtime-packet.md` 是数据包样例。改了任何提示词后重新生成并一起提交。字符预算沿用 P37：规划 6500、执行 8000、收尾 5500。
 
-脚本模型验证控制流及状态契约，不能证明新提示词在真实模型上的选择质量。上线前仍需同模型、同来源的真实对话 A/B；本地缺模型凭据时不得把结构评测当作质量提升分数。
+`prompt-layers.test.ts` 锁定：triage / plan / status 不含 voice；写作阶段 voice 在末尾；长度规则只在 chat-line；拒稿反馈不以 Do not / Never 开头；数据包无 receipts；证据卡渲染与拆分。
+
+## 不在本架构里
+
+legacy 工具（`upsert_*`、`notify_user`、`push_lead`、`web_search`、`reply_with_*`、xhs legacy）的文本仍在各自文件里，不是生产 answerRequests 路径。`market-strategy.ts`、`market-choice-presentation.ts` 等渲染层的中文标签（"推荐理由："、"待确认："）是代码产物，不是提示词。

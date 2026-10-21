@@ -4,13 +4,13 @@ import { marketListingSchema } from '@matchbot/websearch';
 import type { AgentDeps, MatchContext } from '../context.js';
 import { bindTaskMarketPlan } from '../task-market-plan.js';
 import { MARKET_RESEARCH_LIMITS, marketListingForModel } from '../market-research.js';
+import { READ_TASK_SOURCES } from '../prompts/tools/read-task-sources.js';
 
 /** PRD §13: retain useful source memory, but refresh an offer before relying on its old conditions. */
 export function readTaskSourcesTool(deps: AgentDeps) {
   return tool({
     name: 'read_task_sources',
-    description:
-      'Revisit 1-4 saved source refs in the selected task, especially after a followup or changed condition. Saved excerpts are HISTORICAL observations, not current stock or permission. A2H public listings are re-read within the shared 8-detail budget and assigned current m refs. Other sources are historical hints only: use search_information/xhs_search to verify them before citing. No private lookup, contact or messages.',
+    description: READ_TASK_SOURCES.description,
     parameters: z.object({ sources: z.array(z.string().min(1).max(160)).min(1).max(4) }),
     needsApproval: false,
     execute: (args, rc) =>
@@ -30,34 +30,34 @@ export async function readSavedTaskSources(
     await trace(reason);
     return reason;
   };
-  if (ctx.outboundBlocked) return deny('outbound declined; stop');
+  if (ctx.outboundBlocked) return deny(READ_TASK_SOURCES.feedback.blocked);
   if (ctx.runDeadlineAt !== undefined && ctx.runDeadlineAt <= Date.now())
-    return deny('source read deadline reached');
+    return deny(READ_TASK_SOURCES.feedback.deadline);
   if (
     !task ||
     task.ownerUserId !== ctx.userId ||
     task.scope.chatId !== ctx.chatId ||
     task.scope.channel !== (ctx.channel ?? 'telegram')
   )
-    return deny('task scope mismatch');
+    return deny(READ_TASK_SOURCES.feedback.scopeMismatch);
   const sources = [...new Set(args.sources)];
   const saved = task.evidence.filter(
     (e) =>
       sources.includes(e.sourceRef) && !task.goals.find((g) => g.id === e.goalId)?.userConfirmation,
   );
   if (sources.some((ref) => !saved.some((e) => e.sourceRef === ref)))
-    return deny('only saved sources for unresolved goals are allowed');
+    return deny(READ_TASK_SOURCES.feedback.notSaved);
   const ids = sources.filter((s) => /^market:[A-Za-z0-9_-]{1,100}$/.test(s)).map((s) => s.slice(7));
   const attempted = new Set(ctx.marketDetailIds ?? []),
     fresh = ids.filter((id) => !attempted.has(id));
   if (attempted.size + fresh.length > MARKET_RESEARCH_LIMITS.details)
-    return deny('detail budget exhausted; use current evidence');
+    return deny(READ_TASK_SOURCES.feedback.detailBudget);
   if (
     (ctx.marketListings?.length ?? 0) +
       fresh.filter((id) => !ctx.marketListings?.some((n) => n.id === id)).length >
     MARKET_RESEARCH_LIMITS.listings
   )
-    return deny('candidate budget exhausted; use current evidence');
+    return deny(READ_TASK_SOURCES.feedback.candidateBudget);
   const failures: string[] = [];
   if (fresh.length && deps.marketSearch) {
     const intent =
@@ -71,7 +71,7 @@ export async function readSavedTaskSources(
               ? 'carry'
               : null;
     if (!intent || (ctx.marketIntent && ctx.marketIntent !== intent))
-      return deny('saved source does not match the current task intent');
+      return deny(READ_TASK_SOURCES.feedback.intentMismatch);
     ctx.marketPlan ??= bindTaskMarketPlan({ intent, needs: [], preferences: [] }, task);
     ctx.marketIntent = intent;
     ctx.marketListings ??= [];
@@ -110,8 +110,7 @@ export async function readSavedTaskSources(
       .filter((n) => ids.includes(n.id))
       .map((n) => marketListingForModel(n, 1500)),
     failures,
-    guidance:
-      'Historical excerpts are not current citations. Use refreshed m refs only after checking current task conditions; SOLD/expired offers cannot be recommended. Re-search other source types. Saving or reading evidence does not complete the user goal.',
+    guidance: READ_TASK_SOURCES.results.guidance,
   });
   async function trace(result: string, failed = 0) {
     await deps.repos.traces.create({

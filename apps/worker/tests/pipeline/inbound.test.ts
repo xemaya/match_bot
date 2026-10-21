@@ -35,7 +35,9 @@ function makeDeps(over: Record<string, unknown> = {}) {
     findExisting: vi.fn(() => Promise.resolve(null)),
     create: vi.fn(() => Promise.resolve({ id: 'm1' })),
     recentByUser: vi.fn(() => Promise.resolve([])),
+    recentInGroup: vi.fn(() => Promise.resolve([])),
   };
+  const outbound = { recentSentToTarget: vi.fn(() => Promise.resolve([])) };
   const demands = {
     findOpenByUser: vi.fn(() => Promise.resolve([])),
     create: vi.fn(() => Promise.resolve({ id: 'd1' })),
@@ -82,7 +84,19 @@ function makeDeps(over: Record<string, unknown> = {}) {
     ),
     finish: vi.fn(() => Promise.resolve(true)),
   };
-  const repos = { traces, users, groups, messages, demands, runStates, executions };
+  // An open task means an earlier ask was planned; the default keeps re-asks as continuations.
+  const tasks = { findOpenByScope: vi.fn(() => Promise.resolve([{ id: 't1' }])) };
+  const repos = {
+    traces,
+    users,
+    groups,
+    messages,
+    demands,
+    runStates,
+    executions,
+    outbound,
+    tasks,
+  };
   Object.assign(repos, { forExecution: () => repos });
   const evaluateInbound = vi.fn(() => Promise.resolve(verdict));
   const runInbound = vi.fn(() =>
@@ -391,5 +405,98 @@ describe('targeted Jev admission', () => {
     await processInbound(r.deps as never, msg);
     expect(r.evaluateInbound).toHaveBeenCalledOnce();
     expect(r.runInbound).not.toHaveBeenCalled();
+  });
+});
+
+describe('processInbound — JEV_POLICY=off triage', () => {
+  const verdict = (over: Record<string, unknown> = {}) => ({
+    ok: true as const,
+    verdict: {
+      action: 'answer',
+      category: 'other',
+      newCondition: false,
+      handledByMembers: false,
+      sensitive: false,
+      reason: 'asks the group for a pharmacy',
+      ...over,
+    },
+  });
+  function offDeps(outcome: unknown) {
+    const triageInbound = vi.fn(() => Promise.resolve(outcome));
+    const t = makeDeps({ env: { DEFAULT_PHASE: 0, JEV_POLICY: 'off' }, triageInbound });
+    t.repos.messages.recentInGroup.mockResolvedValue([
+      {
+        id: 'earlier',
+        userId: 'u9',
+        groupId: 'g1',
+        text: '我这有台闲置打印机',
+        receivedAt: new Date(Date.now() - 60000),
+      },
+    ] as never);
+    return { ...t, triageInbound };
+  }
+  it('admits a group ask through triage with the recent conversation, never calling Jev', async () => {
+    const t = offDeps(verdict());
+    await processInbound(t.deps as never, { ...msg, text: '狗岛附近哪里买感冒药方便' });
+    expect(t.evaluateInbound).not.toHaveBeenCalled();
+    const triageArg = (t.triageInbound.mock.calls[0] as unknown[])[1] as {
+      transcript: Array<{ text: string; speaker: string }>;
+      addressedToBot: boolean;
+    };
+    expect(triageArg.transcript.map((l) => l.text)).toEqual(['我这有台闲置打印机']);
+    expect(triageArg.transcript[0]!.speaker).toMatch(/^成员/);
+    expect(triageArg.addressedToBot).toBe(false);
+    const arg = firstArg<RunInboundArg>(t.runInbound);
+    expect(arg.ctx['groupTranscript']).toEqual(triageArg.transcript);
+    expect(traceWith(t.traces, 'entered_agent').output['decision']).toEqual({
+      action: 'enter_agent',
+      category: 'other',
+      kind: 'demand',
+    });
+  });
+  it.each([
+    ['ignore', { action: 'ignore', handledByMembers: true }, 'handled_by_members'],
+    ['acknowledge', { action: 'acknowledge' }, 'acknowledgement'],
+    ['peer_offer', { action: 'peer_offer', category: 'housing' }, 'peer_offer_noted'],
+    ['continue without news', { action: 'continue', newCondition: false }, 'no_new_condition'],
+    ['sensitive', { action: 'answer', sensitive: true }, 'sensitive'],
+    ['job', { action: 'answer', category: 'job' }, 'unsupported_category'],
+  ])('drops %s without running the agent', async (_label, over, reason) => {
+    const t = offDeps(verdict(over));
+    await processInbound(t.deps as never, msg);
+    expect(t.runInbound).not.toHaveBeenCalled();
+    expect(traceWith(t.traces, 'dropped_by_triage').output['reason']).toBe(reason);
+  });
+  it('treats a re-ask without new conditions as a fresh ask when no task was ever opened', async () => {
+    const t = offDeps(
+      verdict({ action: 'continue', newCondition: false, category: 'second_hand' }),
+    );
+    (
+      t.repos as { tasks: { findOpenByScope: ReturnType<typeof vi.fn> } }
+    ).tasks.findOpenByScope.mockResolvedValue([]);
+    await processInbound(t.deps as never, msg);
+    expect(traceWith(t.traces, 'reask_without_task')).toBeTruthy();
+    expect(traceWith(t.traces, 'entered_agent').output['decision']).toEqual({
+      action: 'enter_agent',
+      category: 'second_hand',
+      kind: 'demand',
+    });
+  });
+  it('a continuation with a new condition enters as a follow-up', async () => {
+    const t = offDeps(verdict({ action: 'continue', newCondition: true, category: 'second_hand' }));
+    await processInbound(t.deps as never, msg);
+    expect(traceWith(t.traces, 'entered_agent').output['decision']).toEqual({
+      action: 'enter_agent',
+      category: 'second_hand',
+      kind: 'followup',
+    });
+  });
+  it('keeps an unjudged message out of the agent when triage is unavailable', async () => {
+    const t = offDeps({ ok: false, reason: 'timeout' });
+    await processInbound(t.deps as never, msg);
+    expect(t.runInbound).not.toHaveBeenCalled();
+    expect(traceWith(t.traces, 'dropped_by_triage').output['reason']).toBe('timeout');
+    const finish = t.repos.executions.finish.mock.calls[0] as unknown as [{ status: string }];
+    expect(finish[0].status).toBe('failed');
   });
 });

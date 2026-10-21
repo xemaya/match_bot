@@ -86,8 +86,10 @@ for (const root of [
     .filter((n) => n.endsWith('.ts'))
     .sort())
     hash.update(root + '/' + name).update(readFileSync(join(root, name)));
-const soulHash = createHash('sha256').update(readFileSync('packages/agent/SOUL.md')).digest('hex');
-hash.update('packages/agent/SOUL.md').update(soulHash);
+const soulHash = createHash('sha256')
+  .update(readFileSync('packages/agent/prompts/voice/soul.md'))
+  .digest('hex');
+hash.update('packages/agent/prompts/voice/soul.md').update(soulHash);
 const sourceFingerprint = hash.digest('hex');
 const logger = createLogger('p27-conversation-preview', 'warn');
 const prisma = getPrisma(env.DATABASE_URL),

@@ -20,6 +20,7 @@ import {
   TaskProposalError,
   type TaskProposal as Proposal,
 } from '../task-proposal.js';
+import { PLAN_TASK } from '../prompts/tools/plan-task.js';
 
 function newTask(ctx: MatchContext, args: Proposal): UserTask {
   const category =
@@ -33,13 +34,9 @@ function newTask(ctx: MatchContext, args: Proposal): UserTask {
     !args.patch?.goals.length ||
     args.taskRef
   )
-    throw new TaskProposalError(
-      'new task needs a supported objective and separate goals, not another task reference',
-    );
+    throw new TaskProposalError(PLAN_TASK.feedback.newTaskNeeds);
   if (/£\s*\d|\d+\s*(?:英镑|镑|磅|GBP|pounds?)|\d{1,2}月|\b20\d{2}[-/]/i.test(args.objective))
-    throw new TaskProposalError(
-      'Keep the objective generic: role and topic only. Put changing prices, dates and other conditions in constraints.',
-    );
+    throw new TaskProposalError(PLAN_TASK.feedback.objectiveGeneric);
   return taskSchema.parse({
     id: 'new-task-proposal',
     ownerUserId: ctx.userId,
@@ -119,12 +116,11 @@ async function applyProposal(p: {
   args: Proposal;
 }): Promise<string> {
   const { deps, ctx, args } = p;
-  if (ctx.taskUpdate) return 'task prepared: already bound for this turn';
+  if (ctx.taskUpdate) return PLAN_TASK.feedback.alreadyBound;
   if (args.route === 'ignore' || args.route === 'clarify') {
-    if (args.patch || args.outcome)
-      throw new Error('unbound or acknowledged messages cannot mutate a task');
+    if (args.patch || args.outcome) throw new Error(PLAN_TASK.feedback.noMutation);
     ctx.taskUpdate = { kind: args.route === 'ignore' ? 'acknowledged' : 'ambiguous' };
-    return 'task prepared: ' + ctx.taskUpdate.kind;
+    return PLAN_TASK.feedback.prepared(ctx.taskUpdate.kind);
   }
   const candidates = ctx.taskCandidates ?? [];
   const selection = selectTask({
@@ -135,10 +131,10 @@ async function applyProposal(p: {
     ...(ctx.taskAnchorId ? { anchorTaskId: ctx.taskAnchorId } : {}),
     ...(args.taskRef ? { referencedTaskId: args.taskRef } : {}),
   });
-  if (selection.kind === 'inaccessible') throw new Error('task reference is inaccessible');
+  if (selection.kind === 'inaccessible') throw new Error(PLAN_TASK.feedback.inaccessible);
   if (selection.kind === 'clarify' || selection.kind === 'unbound') {
     ctx.taskUpdate = { kind: selection.kind === 'clarify' ? 'ambiguous' : 'unbound' };
-    return 'task prepared: ' + ctx.taskUpdate.kind;
+    return PLAN_TASK.feedback.prepared(ctx.taskUpdate.kind);
   }
   if (
     selection.kind === 'selected' &&
@@ -146,9 +142,7 @@ async function applyProposal(p: {
     !ctx.taskAnchorId &&
     (!args.referenceQuote || !p.text.includes(args.referenceQuote))
   )
-    throw new Error(
-      'selecting between multiple tasks needs a specific current user reference or a delivered reply anchor',
-    );
+    throw new Error(PLAN_TASK.feedback.needsReference);
   if (
     selection.kind === 'selected' &&
     candidates.length > 1 &&
@@ -160,7 +154,7 @@ async function applyProposal(p: {
     )
   ) {
     ctx.taskUpdate = { kind: 'ambiguous' };
-    return 'task prepared: ambiguous';
+    return PLAN_TASK.feedback.prepared('ambiguous');
   }
   let selected =
     selection.kind === 'selected'
@@ -168,7 +162,7 @@ async function applyProposal(p: {
       : selection.kind === 'new'
         ? newTask(ctx, args)
         : undefined;
-  if (!selected) throw new Error('task reference is inaccessible');
+  if (!selected) throw new Error(PLAN_TASK.feedback.inaccessible);
   const patch = normalizeTaskPatch({ input: args.patch, task: selected, text: p.text });
   const isMarket =
     selected.category === 'second_hand' ||
@@ -211,7 +205,7 @@ async function applyProposal(p: {
     }
   }
   if (result.kind !== 'applied' && result.kind !== 'replayed')
-    throw new Error('task changed; do not overwrite another turn');
+    throw new Error(PLAN_TASK.feedback.changed);
   if (
     selection.kind === 'selected' &&
     selected.delivery.status === 'sent' &&
@@ -233,15 +227,14 @@ async function applyProposal(p: {
           : 'continued',
   };
   delete ctx.taskPlanFailures;
-  return 'task prepared: ' + ctx.taskUpdate.kind;
+  return PLAN_TASK.feedback.prepared(ctx.taskUpdate.kind);
 }
 
 /** Internal state proposal only; this tool never sends or bypasses outbound gates. */
 export function planTaskTool(deps: AgentDeps, text: string) {
   return tool({
     name: 'plan_task',
-    description:
-      'Bind the CURRENT user message to one scoped task, or create a new objective with separate goals and explicit constraints. Quote current user text for changes. Use clarify for ambiguous references and ignore for thanks/chatter. Only explicit owner statements can confirm outcomes: thanks, liking a result and conditional/future statements never mean completion. This records internal task state and never sends or contacts anyone.',
+    description: PLAN_TASK.planTask.description,
     parameters: taskProposalSchema,
     needsApproval: false,
     errorFunction: (rc) => invalidInput(deps, rc.context as MatchContext),
@@ -252,7 +245,7 @@ export function planTaskTool(deps: AgentDeps, text: string) {
 async function invalidInput(deps: AgentDeps, ctx: MatchContext) {
   ctx.taskPlanFailures = (ctx.taskPlanFailures ?? 0) + 1;
   await record(deps, ctx, 'invalid_schema');
-  return 'task proposal rejected: invalid JSON/schema; keep goals and constraints flat at the tool root, omit fields not in this tool schema, and use actual JSON null, not the string "null"';
+  return PLAN_TASK.feedback.invalidSchema;
 }
 async function runProposal(p: {
   deps: AgentDeps;
@@ -276,11 +269,7 @@ async function runProposal(p: {
   ) {
     ctx.taskPlanFailures = (ctx.taskPlanFailures ?? 0) + 1;
     await record(deps, ctx, 'single_task_reference_rejected');
-    return (
-      'There is only one scoped task: ' +
-      scoped[0]!.id +
-      '. Use update_task for a compatible short followup, or start_task for a clearly independent objective. Use missing_goal only if the new objective itself is genuinely undefined; do not ask which existing task.'
-    );
+    return PLAN_TASK.feedback.singleScopedTask(scoped[0]!.id);
   }
   try {
     const result = await applyProposal({ deps, ctx, args, text });
@@ -295,8 +284,8 @@ async function runProposal(p: {
         ? error.message
         : error instanceof z.ZodError
           ? error.issues.map((issue) => issue.path.join('.') + ':' + issue.code).join('; ')
-          : 'verify the scoped reference, current user source quotes, explicit outcome and unchanged hard conditions; do not invent facts or retry a changed task';
-    return 'task proposal rejected: ' + feedback;
+          : PLAN_TASK.feedback.fallback;
+    return PLAN_TASK.feedback.rejected(feedback);
   }
 }
 
@@ -318,8 +307,7 @@ export function taskPlanningTools(deps: AgentDeps, text: string, taskRefs?: stri
   const errorFunction = (rc: RunContext) => invalidInput(deps, rc.context as MatchContext);
   const start = tool({
     name: 'start_task',
-    description:
-      'Create an internal scoped task for a NEW objective. Provide short user-language topic goals, parameter-free acceptance criteria and explicitly stated conditions. Do not use this for a bare clarification answer or thanks. No message, contact or transaction is sent.',
+    description: PLAN_TASK.startTask.description,
     parameters: z.strictObject({
       objective: taskProposalSchema.shape.objective.unwrap(),
       category: taskProposalSchema.shape.category.unwrap(),
@@ -343,8 +331,7 @@ export function taskPlanningTools(deps: AgentDeps, text: string, taskRefs?: stri
   });
   const update = tool({
     name: 'update_task',
-    description:
-      'Update one EXISTING scoped task from the current owner message. For budget/date/other condition changes set goals=[] and only supply changed constraints; server updates the acceptance checks. Preserve other goals and conditions. Outcome only for explicit reported completion or cancellation. No external action is sent.',
+    description: PLAN_TASK.updateTask.description,
     parameters: z.strictObject({
       taskRef,
       referenceQuote: taskProposalSchema.shape.referenceQuote,
@@ -370,8 +357,7 @@ export function taskPlanningTools(deps: AgentDeps, text: string, taskRefs?: stri
   });
   const clarify = tool({
     name: 'clarify_task',
-    description:
-      'Record that the current short message cannot be assigned to a task, without changing any task. The answering stage will ask one necessary question through its normal outbound gate.',
+    description: PLAN_TASK.clarifyTask.description,
     parameters: z.strictObject({ reason: z.enum(['ambiguous_reference', 'missing_goal']) }),
     needsApproval: false,
     errorFunction,
@@ -386,8 +372,7 @@ export function taskPlanningTools(deps: AgentDeps, text: string, taskRefs?: stri
   });
   const acknowledge = tool({
     name: 'acknowledge_task',
-    description:
-      'Record thanks, an acknowledgement or irrelevant chatter without changing task progress. Liking an option never means the goal was achieved. This tool sends nothing.',
+    description: PLAN_TASK.acknowledgeTask.description,
     parameters: z.strictObject({}),
     needsApproval: false,
     errorFunction,

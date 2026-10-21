@@ -8,11 +8,11 @@ import {
   marketListingForModel,
   MARKET_RESEARCH_LIMITS,
 } from '../market-research.js';
+import { MARKET_ENRICH } from '../prompts/tools/market-enrich.js';
 export function marketEnrichTool(deps: AgentDeps & { marketSearch: MarketSearch }) {
   return tool({
     name: 'market_enrich',
-    description:
-      'Resolve important missing public facts yourself by reading details of discovered A2H listings before answering; do not send the user a list of facts this tool can look up. Fills original-post publication date, status and public practical information (descriptions truncated to the first 1500 characters). Choose 1-4 returned refs per batch; at most 8 distinct listing details per run. Re-check status: sold/expired is not an available offer. No contact lookup or private messages.',
+    description: MARKET_ENRICH.description,
     parameters: z.object({ refs: z.array(z.string()).min(1).max(4) }),
     execute: async (args, rc) => {
       const ctx = (rc as RunContext<MatchContext>).context;
@@ -27,15 +27,15 @@ export function marketEnrichTool(deps: AgentDeps & { marketSearch: MarketSearch 
         });
         return reason;
       };
-      if (ctx.outboundBlocked) return deny('not allowed: outbound declined; stop');
+      if (ctx.outboundBlocked) return deny(MARKET_ENRICH.feedback.blocked);
       const listings = ctx.marketListings ?? [];
       const selected = [...new Set(args.refs)].map((ref) => listings.find((n) => n.ref === ref));
-      if (selected.some((n) => !n)) return deny('unknown ref: only use market_search results');
+      if (selected.some((n) => !n)) return deny(MARKET_ENRICH.feedback.unknownRef);
       const attempted = new Set(ctx.marketDetailIds ?? []);
       const fresh = selected.filter((n) => n && !attempted.has(n.id));
       if (attempted.size + fresh.length > MARKET_RESEARCH_LIMITS.details)
-        return deny('detail budget exhausted; use existing evidence');
-      if (!fresh.length) return deny('details already attempted; no repeated calls');
+        return deny(MARKET_ENRICH.feedback.detailBudget);
+      if (!fresh.length) return deny(MARKET_ENRICH.feedback.repeated);
       for (const n of fresh) if (n) attempted.add(n.id);
       ctx.marketDetailIds = [...attempted];
       const started = Date.now();
@@ -111,8 +111,7 @@ export function marketEnrichTool(deps: AgentDeps & { marketSearch: MarketSearch 
         ),
         failures,
         remainingDetails: MARKET_RESEARCH_LIMITS.details - attempted.size,
-        guidance:
-          "Check choiceHints and researchTasks before replying. If critical facts are still missing, use at most 1-2 remaining searches for the source-attested entity and that gap, not generic new discovery. Never borrow another owner's conditions. If they remain unknown, show backups rather than confirmed recommendations. Original sourcePublishedAt is not the import createdAt. Keep data from each listing together, do not recommend ended offers; uncertain dates/routes/rent units must be checked via the original post. Descriptions are truncated to the shown text; quote only text you can see.",
+        guidance: MARKET_ENRICH.results.guidance,
       });
     },
   });

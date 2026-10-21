@@ -406,3 +406,7 @@ P39生成配置契约：既有DEEPSEEK_API_KEY/BASE_URL/MODEL仍定义兼容生�
 ## P42 公共网页读取
 
 `websearch.PageReader` 接收 `{url, find?, offset?}`，返回 `ok` 的正文片段、页面地址/标题、导航链接、分页位置，或结构化 `unavailable`。`agent.AgentDeps.pageReader` 可选，由 worker 注入；缺失时不注册工具或引用其协议。仅当前任务已发现地址允许导航；网络层对每次重定向进行 DNS 公网校验并固定连接地址。快照保留读取预算和已发现链接。
+
+2026-10-19 演员迁出：删除 `ACTOR_LAB_CONFIG_PATH`、agent 的 `generateSimulatedUserTurn/queueSimulatedUserTurn`、jev 的 `evaluateParticipantOutbound/participantOutboundQuestions` 与 apps/bot actor-lab 控制器。`TELEGRAM_ACTOR_ALLOWLIST` 及 channel 入站透传保留，供 actor_bots 的演员 Bot 进入正常入站管线；`OutboundMessage.senderAccountId` 列与唯一键不变（空字符串为普通单 Bot 作用域），不新增迁移。
+
+2026-10-20 群聊上下文与 Jev 关闭：`Env.JEV_POLICY` 新增 `off`（不需要 JEV_API_KEY）。db 新增 `messages.recentInGroup(groupId,{limit,sinceHours})` 与 `outbound.recentSentToTarget(target,{limit,sinceHours})`。agent 新增导出 `triageInbound`（一次生成模型调用，返回 `{action,category,newCondition,handledByMembers,sensitive,reason}`）、`loadGroupTranscript/buildGroupTranscript`（成员以稳定别名出现，不含渠道 id）；`MatchContext.groupTranscript` 由 worker 入站管线装入，运行时数据包新增 `groupConversation`。worker `PipelineDeps.triageInbound` 可注入。`JEV_POLICY=off` 时出站门不调用 Jev（verdict 置为通过，trace 带 `policy:'off'`），`evaluateSourceSupport` 三处调用跳过并视为支持。AGENT_VERSION 0.31.0。

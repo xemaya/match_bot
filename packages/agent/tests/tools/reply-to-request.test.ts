@@ -259,18 +259,46 @@ describe('reply_to_request', () => {
     expect(d.repos.outbound.create).not.toHaveBeenCalled();
     expect(d.evaluateOutbound).not.toHaveBeenCalled();
   });
-  it('returns concise-advice feedback instead of silently cutting a market recommendation mid-sentence', async () => {
+  it('sends an over-long chat line back with what to move into details instead of cutting it', async () => {
     const { d, c, t } = setup(0);
     const result = await t.invoke(
       { context: c } as never,
       JSON.stringify({
         kind: 'partial',
         refs: ['m1'],
-        text: '这段建议没有收敛，重复了过多信息。'.repeat(60),
+        text: '这段建议没有收敛，重复了过多信息。'.repeat(30),
       }),
     );
-    expect(result).toContain('700 characters');
+    expect(result).toContain('400 characters');
+    expect(result).toContain('details');
     expect(d.repos.outbound.create).not.toHaveBeenCalled();
+  });
+  it('holds a group chat line to three lines and 150 characters', async () => {
+    const { d, c, t } = setup(0);
+    c.groupId = 'g';
+    const long = await t.invoke(
+      { context: c } as never,
+      JSON.stringify({ ...args, text: '没有NHS number也能注册GP，注册免费。'.repeat(8) }),
+    );
+    expect(long).toContain('150 characters');
+    const manyLines = await t.invoke(
+      { context: c } as never,
+      JSON.stringify({ ...args, text: '一\n二\n三\n四' }),
+    );
+    expect(manyLines).toContain('3 lines');
+    expect(d.repos.outbound.create).not.toHaveBeenCalled();
+  });
+  it('folds details and source links into an evidence card under the chat line', async () => {
+    const { d, c, t } = setup(0);
+    await t.invoke(
+      { context: c } as never,
+      JSON.stringify({ ...args, details: '注册是免费的，诊所可能会要住址证明。' }),
+    );
+    expect(d.repos.outbound.create).toHaveBeenCalledOnce();
+    const [draft] = d.repos.outbound.create.mock.calls[0] as unknown as [{ text: string }];
+    expect(draft.text.startsWith(args.text + '\n\n【详情】\n注册是免费的')).toBe(true);
+    expect(draft.text).toContain('\n\n来源：[1. NHS register](https://www.nhs.uk/register/)');
+    expect(draft.text.indexOf('【详情】')).toBeLessThan(draft.text.indexOf('来源：'));
   });
   it('does not enqueue a background promise as a clarification', async () => {
     const { d, c, t } = setup(0);
@@ -804,7 +832,9 @@ describe('reply_to_request', () => {
     { ...args, refs: [] },
   ])('rejects unsupported sources/facts/typed links', async (input) => {
     const { d, c, t } = setup(0);
-    expect(await t.invoke({ context: c } as never, JSON.stringify(input))).toContain('invalid');
+    expect(await t.invoke({ context: c } as never, JSON.stringify(input))).toMatch(
+      /^(?:Cite only|Remove|Call search_information)/,
+    );
     expect(d.repos.outbound.create).not.toHaveBeenCalled();
   });
   it('does not treat valid citation IDs as numerical factual claims', async () => {

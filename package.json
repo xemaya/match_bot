@@ -17,6 +17,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "eval": "pnpm --filter @matchbot/eval exec tsx src/cli.ts",
+    "prompt:audit": "node --import tsx scripts/local/prompt-audit.mts",
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test",
     "dev:bot": "pnpm --filter @matchbot/bot dev",
     "dev:worker": "pnpm --filter @matchbot/worker dev",

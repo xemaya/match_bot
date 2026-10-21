@@ -93,6 +93,44 @@ describe('market research tools', () => {
     expect(result).not.toContain('upsert_demand');
     expect(d.marketSearch.find).not.toHaveBeenCalled();
   });
+  it('names the schema field that broke and accepts up to twenty area names', async () => {
+    const base = {
+      needs: [{ id: 'room', terms: ['合租'] }],
+      preferences: [],
+      requiredTerms: [],
+      excludeTerms: [],
+      budget: 1000,
+      route: null,
+      dateRange: null,
+    };
+    const areas = (n: number) => Array.from({ length: n }, (_, i) => 'Area ' + i);
+    const d = deps(),
+      c = ctx({ demand: { category: 'housing', confidence: 0.95, lang: 'zh' } });
+    const t = marketSearchTool({ ...d, answerRequests: true } as never);
+    const tooMany = await t.invoke(
+      rc(c),
+      JSON.stringify({
+        ...search([{ ...query('合租'), tradeType: 'ANY' }], 'discover', 'housing'),
+        plan: { ...base, requiredArea: areas(21) },
+      }),
+    );
+    expect(tooMany).toContain('plan.requiredArea');
+    expect(tooMany).not.toContain('Area 0');
+    expect(d.marketSearch.find).not.toHaveBeenCalled();
+    const traced = d.repos.traces.create.mock.calls
+      .map((call) => (call as [{ output: Record<string, unknown> }])[0].output)
+      .find((output) => output['gate'] === 'market_search_input');
+    expect(traced).toMatchObject({ attempt: 1 });
+    expect(traced?.['detail']).toEqual([expect.stringContaining('plan.requiredArea')]);
+    await t.invoke(
+      rc(c),
+      JSON.stringify({
+        ...search([{ ...query('合租'), tradeType: 'ANY' }], 'discover', 'housing'),
+        plan: { ...base, requiredArea: areas(14) },
+      }),
+    );
+    expect(d.marketSearch.find).toHaveBeenCalled();
+  });
   it('executes the current user target direction even when the model requests the opposite side', async () => {
     const d = deps(),
       c = ctx({ marketTarget: 'SELL' });
@@ -293,7 +331,7 @@ describe('market research tools', () => {
       await marketSearchTool(d as never).invoke(rc(c), JSON.stringify(search())),
     ) as { listings: Array<Record<string, unknown>> };
     const shown = out.listings[0]!;
-    expect(shown['description']).toBe(`小绿锅成色新。${'细'.repeat(493)}…`);
+    expect(shown['description']).toBe(`小绿锅成色新。${'细'.repeat(243)}…`);
     expect(shown['descriptionTruncated']).toBe(true);
     expect(shown).not.toHaveProperty('id');
     expect(shown).not.toHaveProperty('url');

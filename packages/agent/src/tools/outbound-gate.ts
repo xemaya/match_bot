@@ -5,6 +5,7 @@ import { hashText } from '@matchbot/shared';
 import type { RunContext } from '@openai/agents';
 import type { AgentDeps, MatchContext } from '../context.js';
 import { taskDeliveryForOutbound } from '../task-outbound.js';
+import { OUTBOUND } from '../prompts/tools/outbound.js';
 
 export interface OutboundDraftInput {
   /** 用途；决定是否计入频控。每个出站工具必须显式给出。 */
@@ -65,7 +66,11 @@ export async function decideForOutbound(
     return 'drop';
   }
   const targeted = deps.env.JEV_POLICY === 'targeted';
-  const direct = targeted && (ctx.addressedToBot === true || ctx.source?.userId === ctx.chatId);
+  // off: inbound triage already decided this request deserves a reply, so there is no unsolicited
+  // usefulness threshold either; fact validators in the reply tools, phase and rate gates remain.
+  const jevOff = deps.env.JEV_POLICY === 'off';
+  const direct =
+    jevOff || (targeted && (ctx.addressedToBot === true || ctx.source?.userId === ctx.chatId));
   // Only exact server-authored status is exempt, never arbitrary text labelled as a status.
   if (targeted && isVerifiedRequestStatus && ctx.phase === 2) {
     await deps.repos.traces.create({
@@ -116,18 +121,20 @@ export async function decideForOutbound(
   }
   if (ctx.phase === 2) {
     const demand = ctx.currentRequest?.demand ?? d.evaluationDemand ?? ctx.demand;
-    const v = demand
-      ? await deps.evaluateOutbound(deps.jev, {
-          draft: d.text,
-          demand,
-          ...(ctx.task && ctx.currentRequest ? { requestContext: ctx.currentRequest.text } : {}),
-          supplierSummaries: d.supplierSummaries,
-          recentReplies: ctx.recentReplies,
-          inputRef: d.inputRef,
-          phase: ctx.phase,
-          ...(d.replyPurpose ? { replyPurpose: d.replyPurpose } : {}),
-        })
-      : null;
+    const v = jevOff
+      ? { ok: true as const, worthReplying: 3, languageOk: 1, mentionsUnverified: 0 }
+      : demand
+        ? await deps.evaluateOutbound(deps.jev, {
+            draft: d.text,
+            demand,
+            ...(ctx.task && ctx.currentRequest ? { requestContext: ctx.currentRequest.text } : {}),
+            supplierSummaries: d.supplierSummaries,
+            recentReplies: ctx.recentReplies,
+            inputRef: d.inputRef,
+            phase: ctx.phase,
+            ...(d.replyPurpose ? { replyPurpose: d.replyPurpose } : {}),
+          })
+        : null;
     verdict = v && v.ok ? v : null;
     // 只有推荐受频控，且只在群设了额度时才限（2026-09-25 起默认不限；PRD §6.2 原为一天 3 次）。
     // 追问、通知、线索、表情不占额度。
@@ -158,6 +165,7 @@ export async function decideForOutbound(
       decision,
       verdict,
       rateOk,
+      ...(jevOff ? { policy: 'off' } : {}),
       isVerifiedRequestStatus,
       ...(d.replyPurpose ? { replyPurpose: d.replyPurpose } : {}),
     },
@@ -198,7 +206,7 @@ export async function executeOutbound(
 ): Promise<string> {
   if (decision === 'drop') {
     ctx.outboundBlocked = true;
-    return 'not sent: the outbound gate decided this should not be posted. Do not rewrite or retry; stop here.';
+    return OUTBOUND.feedback.gateDropped;
   }
   const status = decision === 'dry_run' ? 'dry_run' : 'pending';
   const row = await deps.repos.outbound.create(
@@ -221,12 +229,12 @@ export async function executeOutbound(
   ctx.answerRecorded = true;
   deps.logger.info({ outboundId: row.id, decision, phase: ctx.phase }, 'outbound message recorded');
   return row.status === 'dry_run'
-    ? `dry-run recorded (${row.id}); nothing was sent`
+    ? OUTBOUND.results.dryRun(row.id)
     : row.status === 'pending' || row.status === 'sending'
-      ? `queued (${row.id})`
+      ? OUTBOUND.results.queued(row.id)
       : row.status === 'sent'
-        ? `not sent: this request already has a confirmed reply (${row.id})`
-        : `not sent: this request already has a failed or unconfirmed delivery (${row.id}); do not automatically resend`;
+        ? OUTBOUND.results.alreadyConfirmed(row.id)
+        : OUTBOUND.results.alreadyFailed(row.id);
 }
 
 /** needsApproval：只有 'review' 才中断；auto / dry_run / drop 都不中断，由 execute 按 decision 处理。 */

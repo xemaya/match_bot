@@ -1,5 +1,5 @@
 import type { AgentDeps, MatchContext } from '../context.js';
-import { sceneContract } from './scenes.js';
+import { sceneContract } from './policy/scenes.js';
 
 export function executionToolNames(deps: AgentDeps, ctx: MatchContext): Set<string> {
   if (['completed', 'cancelled', 'acknowledged'].includes(ctx.taskUpdate?.kind ?? ''))

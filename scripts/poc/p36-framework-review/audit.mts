@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { loadEnv, decrypt } from '../../../packages/shared/src/index.js';
 import { taskSchema } from '../../../packages/domain/src/index.js';
 import { researchContextSchema } from '../../../packages/agent/src/restore-search-context.js';
-import { requestInstructions } from '../../../packages/agent/src/request-instructions.js';
+import { researchInstructions as requestInstructions } from '../../../packages/agent/src/prompts/stages/research.js';
 import { createMatchAgent } from '../../../packages/agent/src/index.js';
 import type { AgentDeps, MatchContext } from '../../../packages/agent/src/context.js';
 import { buildDeliveryPacket } from '../../../packages/agent/src/delivery-context.js';

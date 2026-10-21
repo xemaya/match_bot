@@ -95,11 +95,21 @@ export function bindTaskMarketPlan(plan: MarketPlan, task: UserTask): MarketPlan
     return [...effective.values()];
   };
   const base = goals.length === 1 ? scoped(goals[0]!.id) : shared;
+  // The model names its needs itself ("room_share"), the task names goals ("east_london_room").
+  // Aliases matched only by id were silently dropped, leaving the goal title and its long search
+  // phrases as the only subject terms: 2026-10-20 replay, 109 A2H listings, none judged on-topic.
+  const aliasesFor = (goal: UserTask['goals'][number], index: number): string[] => {
+    const byId = plan.needs.find((need) => need.id === goal.id);
+    if (byId) return byId.terms;
+    if (goals.length === 1) return plan.needs.flatMap((need) => need.terms);
+    if (plan.needs.length === goals.length) return plan.needs[index]?.terms ?? [];
+    return [];
+  };
   return {
     intent: plan.intent,
     ...rulesForConstraints(base, plan.intent),
-    needs: goals.map((goal) => {
-      const aliases = plan.needs.find((need) => need.id === goal.id)?.terms ?? [];
+    needs: goals.map((goal, index) => {
+      const aliases = aliasesFor(goal, index);
       const conditions = scoped(goal.id);
       const rules = rulesForConstraints(conditions, plan.intent);
       // Activity titles often include scheduling/participant qualifiers. Those are checked

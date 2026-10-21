@@ -1,4 +1,11 @@
-import type { AgentDeps, MatchContext, runInbound as runInboundFn } from '@matchbot/agent';
+import {
+  loadGroupTranscript,
+  triageInbound as triageInboundFn,
+  type AgentDeps,
+  type MatchContext,
+  type runInbound as runInboundFn,
+  type TriageVerdict,
+} from '@matchbot/agent';
 import type { publishApproval as publishApprovalFn } from '@matchbot/approval';
 import type { Demand } from '@matchbot/db';
 import type { DemandDraft, InboundMessage, Phase } from '@matchbot/domain';
@@ -8,6 +15,8 @@ import type { evaluateInbound as evaluateInboundFn } from '@matchbot/jev';
 export interface PipelineDeps extends AgentDeps {
   evaluateInbound: typeof evaluateInboundFn;
   runInbound: typeof runInboundFn;
+  /** JEV_POLICY=off inbound gate; injectable for tests. */
+  triageInbound?: typeof triageInboundFn;
   publishApproval: typeof publishApprovalFn;
   cards: Parameters<typeof publishApprovalFn>[0]['cards'];
 }
@@ -118,6 +127,17 @@ export async function processInbound(
     ...(stored.replyToBotText ? { replyToBotText: stored.replyToBotText } : {}),
     ...(stored.replyToMessageId ? { replyToMessageId: stored.replyToMessageId } : {}),
   };
+  // What other members said recently: context for the gate and the agent, never a request itself.
+  // Read-only and group-wide, so it uses the unfenced repositories (no per-user lock transaction).
+  const groupTranscript = stored.groupId
+    ? await loadGroupTranscript(rawRepos, {
+        groupId: stored.groupId,
+        chatId: msg.chatId,
+        sourceMessageId: stored.id,
+        userId: user.id,
+        receivedAt: stored.receivedAt,
+      })
+    : [];
   d = { ...d, repos: rawRepos.forExecution(execution) };
   let terminal: 'completed' | 'failed' | 'accepted' | 'waiting_approval' = 'completed';
   let runStateId: string | undefined;
@@ -129,10 +149,81 @@ export async function processInbound(
       d.taskRequests &&
       (isPrivate || msg.addressedToBot);
     let verdict: Awaited<ReturnType<typeof d.evaluateInbound>> | undefined;
+    let triage: TriageVerdict | undefined;
     let decision: ReturnType<typeof decideInbound>;
     if (directAdmission) {
       decision = { action: 'enter_agent', category: 'other', kind: 'followup' };
       await trace('gate', stored.id, { outcome: 'direct_request_admitted', policy: 'targeted' });
+    } else if (d.env.JEV_POLICY === 'off') {
+      const outcome = await (d.triageInbound ?? triageInboundFn)(d, {
+        text: msg.text,
+        inputRef: stored.id,
+        phase,
+        isPrivate,
+        addressedToBot: isPrivate || msg.addressedToBot === true,
+        replyToBotText: msg.replyToBotText,
+        transcript: groupTranscript,
+      });
+      if (!outcome.ok) {
+        // Same degradation as an unavailable Jev: an unjudged message never enters the agent.
+        terminal = 'failed';
+        errorCode = 'triage_unavailable';
+        d.logger.warn(
+          { inputRef: stored.id, reason: outcome.reason, detail: outcome.detail },
+          'triage unavailable',
+        );
+        await trace('gate', stored.id, {
+          outcome: 'dropped_by_triage',
+          reason: outcome.reason,
+          ...(outcome.detail ? { detail: outcome.detail } : {}),
+        });
+        return;
+      }
+      triage = outcome.verdict;
+      let dropReason = triage.sensitive
+        ? 'sensitive'
+        : triage.action === 'ignore'
+          ? triage.handledByMembers
+            ? 'handled_by_members'
+            : 'not_request'
+          : triage.action === 'acknowledge'
+            ? 'acknowledgement'
+            : triage.action === 'peer_offer'
+              ? 'peer_offer_noted'
+              : triage.action === 'continue' && !triage.newCondition && !msg.addressedToBot
+                ? 'no_new_condition'
+                : triage.category === 'job'
+                  ? 'unsupported_category'
+                  : null;
+      // "Same conditions as before" only means handled if an earlier ask actually opened a task.
+      // 2026-10-21 run 5: a printer ask lost to an aborted planning call was re-asked and dropped
+      // as no_new_condition, so the member never got anything.
+      if (
+        dropReason === 'no_new_condition' &&
+        !(
+          await d.repos.tasks.findOpenByScope({
+            userId: user.id,
+            scope: { channel: msg.channel, chatId: msg.chatId },
+          })
+        ).length
+      ) {
+        await trace('gate', stored.id, { outcome: 'reask_without_task', triage });
+        triage = { ...triage, action: 'answer', newCondition: true };
+        dropReason = null;
+      }
+      if (dropReason) {
+        await trace('gate', stored.id, {
+          outcome: 'dropped_by_triage',
+          reason: dropReason,
+          triage,
+        });
+        return;
+      }
+      decision = {
+        action: 'enter_agent',
+        category: triage.category,
+        kind: triage.action === 'continue' ? 'followup' : 'demand',
+      };
     } else {
       const recent = (
         await d.repos.messages.recentByUser(user.id, RECENT_WINDOW_HOURS, {
@@ -208,9 +299,15 @@ export async function processInbound(
       ...(msg.replyToBotText ? { replyToBotText: msg.replyToBotText } : {}),
       ...(msg.replyToMessageId ? { replyToMessageId: msg.replyToMessageId } : {}),
       recentReplies: [],
+      groupTranscript,
       ...(open ? { demandId: open.id, demand: toDemandDraft(open) } : {}),
     };
-    await trace('gate', stored.id, { outcome: 'entered_agent', decision, verdict });
+    await trace('gate', stored.id, {
+      outcome: 'entered_agent',
+      decision,
+      ...(verdict ? { verdict } : {}),
+      ...(triage ? { triage } : {}),
+    });
 
     let r: Awaited<ReturnType<typeof d.runInbound>>;
     try {

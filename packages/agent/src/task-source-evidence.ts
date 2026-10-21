@@ -412,6 +412,9 @@ export function buildTaskSourceReview(
   const sourceIndexes: number[] = [];
   const eligible: boolean[] = [];
   const decisive: Array<boolean | undefined> = [];
+  // Whether the server's own check of this condition (budget, area, date, ...) agrees with the
+  // proposed status; undefined when the server has no opinion.
+  const computedAgrees: Array<boolean | undefined> = [];
   for (const [index, check] of checks.entries()) {
     const goal = ctx.task!.goals.find((g) => g.id === check.goalId)!;
     const criterion = goal.criteria.find((c) => c.id === check.criterionId)!;
@@ -461,11 +464,12 @@ export function buildTaskSourceReview(
         indexes.push(index);
         sourceIndexes.push(sourceIndex);
         eligible.push(canUse);
-        decisive.push(
-          source.computed?.decisive
+        const agrees =
+          source.computed && source.computed.status !== 'unknown'
             ? source.computed.status === (status === 'supported' ? 'met' : 'mismatch')
-            : undefined,
-        );
+            : undefined;
+        decisive.push(source.computed?.decisive ? agrees : undefined);
+        computedAgrees.push(agrees);
       }
     }
   }
@@ -476,5 +480,6 @@ export function buildTaskSourceReview(
     sourceIndexes,
     eligible,
     decisive,
+    computedAgrees,
   };
 }

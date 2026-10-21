@@ -19,7 +19,7 @@ const deps = {
 };
 describe('versioned SOUL', () => {
   it('injects the actual versioned file into the normal answering agent without widening its tools', async () => {
-    const soul = readFileSync(new URL('../SOUL.md', import.meta.url), 'utf8').trim();
+    const soul = readFileSync(new URL('../prompts/voice/soul.md', import.meta.url), 'utf8').trim();
     const agent = createMatchAgent(deps as never, { phase: 0, finalAnswerOnly: true }).agent;
     const prompt = await agent.getSystemPrompt(new RunContext(context));
     expect(soul.length).toBeGreaterThan(200);

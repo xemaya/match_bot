@@ -1,6 +1,22 @@
 import { canAskTaskQuestion } from '@matchbot/domain';
 import type { MatchContext } from './context.js';
 
+/**
+ * A group message that did not address the assistant is unsolicited participation: it earns a
+ * reply only when the reply helps the asker. Private chats and direct replies/@mentions are
+ * conversations the user is waiting on.
+ */
+export function isUnsolicitedGroupTurn(
+  ctx: Pick<MatchContext, 'groupId' | 'addressedToBot'>,
+): boolean {
+  return !!ctx.groupId && ctx.addressedToBot !== true;
+}
+
+/** A fixed status helps only when it carries the planned personal question that unblocks the task. */
+export function hasStatusValue(ctx: MatchContext, status: string): boolean {
+  return !isUnsolicitedGroupTurn(ctx) || status.includes('\n\n');
+}
+
 /** Fixed public status, never a rewrite of the rejected recommendation. */
 export function renderRequestStatus(ctx: MatchContext): string | null {
   if (

@@ -10,7 +10,7 @@ export { createTraceProcessor } from './tracing.js';
 export { createPgSession } from './session.js';
 export { runInbound, resumeRun, SDK_VERSION, type RunOutcome } from './run.js';
 export type { AgentDeps, MatchContext } from './context.js';
-
-export { generateSimulatedUserTurn, queueSimulatedUserTurn } from './simulated-user.js';
+export { triageInbound, type TriageOutcome, type TriageVerdict } from './triage.js';
+export { loadGroupTranscript, buildGroupTranscript, type GroupLine } from './group-context.js';
 
 export { createDeepSeekSearch } from './deepseek-search.js';

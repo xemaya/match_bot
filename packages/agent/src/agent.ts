@@ -1,19 +1,20 @@
 import { canHandOffToDelivery } from './delivery-context.js';
 import { contextInputFilter } from './prompts/runtime-context.js';
-import { selectScene } from './prompts/scenes.js';
+import { selectScene } from './prompts/policy/scenes.js';
 import {
   executionToolNames,
   validateToolContract,
   validatePromptReferences,
 } from './prompts/tool-contract.js';
-import { legacyInstructions } from './prompts/legacy-instructions.js';
+import { legacyInstructions } from './prompts/stages/legacy.js';
 import { replyRequestStatusTool } from './tools/reply-request-status.js';
 import { replyToRequestTool } from './tools/reply-to-request.js';
 import { searchInformationTool } from './tools/search-information.js';
 import { readWebPageTool } from './tools/read-web-page.js';
 import { recordRequestTool } from './tools/record-request.js';
-import { requestInstructions } from './request-instructions.js';
-import { taskPlanningInstructions } from './task-instructions.js';
+import { researchInstructions } from './prompts/stages/research.js';
+import { taskPlanningInstructions } from './prompts/stages/plan.js';
+import { STATUS_INSTRUCTIONS } from './prompts/stages/status.js';
 import { taskPlanningTools } from './tools/plan-task.js';
 import { recordTaskProgressTool } from './tools/record-task-progress.js';
 import { readTaskSourcesTool } from './tools/read-task-sources.js';
@@ -45,7 +46,7 @@ import { marketEnrichTool } from './tools/market-enrich.js';
 import { replyWithMarketResultsTool } from './tools/reply-with-market-results.js';
 
 /** 改 instructions 或任何工具描述时递增（AGENTS.md §8 第 4 条）；升级 SDK 时清空待审 run_states。 */
-export const AGENT_VERSION = '0.30.0';
+export const AGENT_VERSION = '0.32.0';
 
 /** 「下周六」要换算成 whenAt，模型需要知道今天是哪天、星期几（伦敦时区）。 */
 export function londonToday(now = new Date()): string {
@@ -196,9 +197,9 @@ export function createMatchAgent(
             run.taskRefs === undefined || run.taskRefs.length > 0,
           )
         : run?.requestStatusOnly
-          ? 'Call reply_request_status with {} exactly once. Its server-generated text is a separate acknowledgement, not a rewrite of a declined recommendation. Do not call any other tool or finish without the status call.'
+          ? STATUS_INSTRUCTIONS
           : deps.answerRequests
-            ? requestInstructions(deps, rc.context, !!run?.finalAnswerOnly, londonToday())
+            ? researchInstructions(deps, rc.context, !!run?.finalAnswerOnly, londonToday())
             : legacyInstructions(deps, rc.context, londonToday()),
     tools: run?.taskPlanningOnly
       ? taskPlanningTools(deps, run.input ?? '', run.taskRefs)

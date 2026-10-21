@@ -45,14 +45,15 @@ export const envSchema = z
     GENERATION_REASONING_EFFORT: z
       .enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
       .optional(),
-    JEV_POLICY: z.enum(['strict', 'targeted']).default('strict'),
+    // off: no Jev at all. Inbound admission is one cheap generation-model triage call that sees the
+    // recent group conversation; outbound keeps the code validators, phase and rate gates only.
+    JEV_POLICY: z.enum(['strict', 'targeted', 'off']).default('strict'),
     JEV_API_KEY: z.string().default(''),
     // Jev 经 OpenRouter 的 decisions 端点；客户端拼 `${JEV_BASE_URL}/decisions`（PoC V4 结论，
     // 见 plan/P0-poc.md「对后续工作包的跨项结论」第 2 条）。直连 api.typesafe.ai 需要另一把 key。
     JEV_BASE_URL: z.string().url().default('https://openrouter.ai/api/alpha'),
     JEV_MODEL: z.string().default('typesafe/jev-1.13'),
     TELEGRAM_ACTOR_ALLOWLIST: actorAllowlistEnv,
-    ACTOR_LAB_CONFIG_PATH: z.string().min(1).optional(),
     TELEGRAM_BOT_TOKEN: z.string().min(1),
     TELEGRAM_OPS_CHAT_ID: z.string().min(1),
     DEFAULT_PHASE: z.coerce.number().int().min(0).max(2).default(0),
