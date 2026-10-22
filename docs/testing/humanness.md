@@ -26,7 +26,7 @@ SNAPSHOT_KEY=... pnpm humanness freeze r3
 pnpm humanness:record r3 --as r3-rec
 
 # 4. 改提示词 / 校验门 / 渲染，然后只重跑收尾阶段
-pnpm build && pnpm humanness replay r3-rec --as r3-try1 [--n 3] [--only <caseId>]
+pnpm build && pnpm humanness replay r3-rec --as r3-try1 [--n 3] [--only <caseId>]   # 每条和合计都打印收尾用的 model tokens
 pnpm humanness judge r3-try1
 pnpm humanness compare r3-rec r3-try1
 ```

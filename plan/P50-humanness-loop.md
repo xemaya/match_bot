@@ -1,6 +1,6 @@
 # P50 人感回路：不进群也能反复测
 
-状态：评审中（代码、测试、文档、基线、重录、回放全部实跑完成）。负责人 claude。依赖：P49（0.33.0，已合入 main）。范围 `packages/eval`（新增 `src/humanness/`）、`packages/agent/src/index.ts` 补几个导出、根 `package.json` 一个命令、`docs/testing/humanness.md`。不改提示词、不改校验门、不改渲染：改法放 P51。
+状态：完成（2026-10-22 合入 main `1adf509`）。负责人 claude。依赖：P49（0.33.0，已合入 main）。范围 `packages/eval`（新增 `src/humanness/`）、`packages/agent/src/index.ts` 补几个导出、根 `package.json` 一个命令、`docs/testing/humanness.md`。不改提示词、不改校验门、不改渲染：改法放 P51。
 
 用户决定（2026-10-22）：先回路，后改法。判官不由 Claude 担任（不可重复、无法盲判），用 OPENAIROUTER_BASE_URL / OPENAIROUTER_API_KEY 这一套，模型 `JUDGE_MODEL` 可配，默认 gpt-6.1-sol（actor_bots 写作者同款）。
 
@@ -85,4 +85,4 @@ L1 的边界：研究包冻结在录制那一刻，改法若影响研究阶段�
 
 同一提示词录制与回放的差距就是这条回路的噪声底：长度约 ±10、£ 与汇报词 ±2。P51 的改法要在噪声之上才算有效，建议每次 `--n 3` 取中位。
 
-**未提交。** 与用户自己的 0.34.0 改动同在工作树。
+**合入。** 2026-10-22 应用户要求合入 main（`1adf509`）。之后 replay 每条与合计会打印收尾阶段的 model tokens（取自 SDK 原始响应的 usage，抛错的那条记 0），轮次文件多一个可选字段 `modelTokens`。

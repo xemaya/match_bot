@@ -78,7 +78,7 @@ export const REPLY_TO_REQUEST = {
     unsupportedFeature: (labels: string[]) =>
       'Remove the claim about ' +
       labels.join(', ') +
-      ', or turn it into a question for the seller (你问一句能不能…); the cited post does not mention it, and a model name does not prove a feature.',
+      ', or leave it as something to ask the seller; the cited post does not mention it, and a model name does not prove a feature.',
     unknownSourceRef: 'Cite only returned source or passage refs.',
     factsNeedSources:
       'Call search_information first, or use no_match/clarification/unavailable without inventing facts: information facts need sources.',

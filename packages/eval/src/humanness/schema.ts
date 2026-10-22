@@ -23,6 +23,8 @@ export const roundCaseSchema = z.object({
   /** Replay only: how many drafts the tool sent back before this one was accepted. */
   rejectedDrafts: z.number().int().nonnegative().optional(),
   elapsedMs: z.number().int().nonnegative().optional(),
+  /** Replay only: input + output tokens of the finalization run (0 when the run threw). */
+  modelTokens: z.number().int().nonnegative().optional(),
 });
 export type RoundCase = z.infer<typeof roundCaseSchema>;
 

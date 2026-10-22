@@ -47,7 +47,7 @@
 - **feedback.incompleteReview(…)**: Give an honest unavailable explanation with refs=[] or fewer already-checkable offers. The selected source conflict review is incomplete (…), so do not call it a match.
 - **feedback.unknownTotal**: Distinguish the verified rent from the unconfirmed total. Rent excludes bills and the total cost is unknown, so drop the claim that rent plus bills fits the budget.
 - **feedback.unsupportedNumbers(…)**: Remove, or cite supporting evidence for, the unsupported numerical values …. Citation IDs are not user text.
-- **feedback.unsupportedFeature(…)**: Remove the claim about …, or turn it into a question for the seller (你问一句能不能…); the cited post does not mention it, and a model name does not prove a feature.
+- **feedback.unsupportedFeature(…)**: Remove the claim about …, or leave it as something to ask the seller; the cited post does not mention it, and a model name does not prove a feature.
 - **feedback.unknownSourceRef**: Cite only returned source or passage refs.
 - **feedback.factsNeedSources**: Call search_information first, or use no_match/clarification/unavailable without inventing facts: information facts need sources.
 - **feedback.nhsOnly**: Cite NHS official evidence for GP registration facts.

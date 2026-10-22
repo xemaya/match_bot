@@ -171,6 +171,7 @@ try {
       try {
         const repos = createRepositories(prisma);
         const cases = [];
+        let tokens = 0;
         for (const file of readdirSync(dir)
           .filter((f) => f.endsWith('.json'))
           .sort()) {
@@ -179,8 +180,9 @@ try {
           for (let k = 0; k < n; k++) {
             const row = await replayCase({ env: e, repos, fixture });
             cases.push({ ...row, id: n > 1 ? `${row.id}#${k + 1}` : row.id });
+            tokens += row.modelTokens;
             out(
-              `${row.id}${n > 1 ? '#' + (k + 1) : ''} ${row.outcome} ${row.elapsedMs}ms rejected=${row.rejectedDrafts}\n  ${row.line}${row.card ? '\n  [card ' + row.card.length + ' chars, ' + row.links.length + ' links]' : ''}`,
+              `${row.id}${n > 1 ? '#' + (k + 1) : ''} ${row.outcome} ${row.elapsedMs}ms rejected=${row.rejectedDrafts} tokens=${row.modelTokens}\n  ${row.line}${row.card ? '\n  [card ' + row.card.length + ' chars, ' + row.links.length + ' links]' : ''}`,
             );
           }
         }
@@ -195,7 +197,7 @@ try {
           humans: source.humans,
         };
         writeJson(roundPath(as), round);
-        out(`\nwrote ${roundPath(as)}`);
+        out(`\nwrote ${roundPath(as)} (${tokens} model tokens)`);
         printMetrics([source, round]);
       } finally {
         await disconnectPrisma();

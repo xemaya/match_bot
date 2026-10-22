@@ -27,7 +27,9 @@ export async function replayCase(p: {
   repos: Repositories;
   fixture: CaseFixture;
   timeoutMs?: number;
-}): Promise<RoundCase & { rejectedDrafts: number; elapsedMs: number; outcome: string }> {
+}): Promise<
+  RoundCase & { rejectedDrafts: number; elapsedMs: number; modelTokens: number; outcome: string }
+> {
   const { fixture } = p;
   const logger = createLogger('humanness-replay', 'silent');
   const traces = createMemoryTraces();
@@ -144,6 +146,7 @@ export async function replayCase(p: {
   const started = Date.now();
   let outcome = 'recorded';
   let responses = 0;
+  let modelTokens = 0;
   try {
     const result = await runner.run(agent, fixture.input, {
       context: ctx,
@@ -151,6 +154,7 @@ export async function replayCase(p: {
       signal: AbortSignal.timeout(timeoutMs),
     });
     responses = result.rawResponses.length;
+    for (const r of result.rawResponses) modelTokens += r.usage.inputTokens + r.usage.outputTokens;
     if (!drafts.length) outcome = ctx.outboundDeclineReason ?? 'not_recorded';
   } catch (error) {
     outcome = 'error:' + (error instanceof Error ? error.name : 'unknown');
@@ -172,6 +176,7 @@ export async function replayCase(p: {
     ...row,
     rejectedDrafts: Math.max(0, responses - 1),
     elapsedMs: Date.now() - started,
+    modelTokens,
     outcome,
   };
 }
