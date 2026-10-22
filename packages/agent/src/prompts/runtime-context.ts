@@ -124,7 +124,14 @@ export function runtimeContext(ctx: MatchContext, stage: PromptStage): Record<st
   return {
     ...common,
     quotedPublicReply: ctx.replyToBotText?.slice(0, 800) ?? null,
-    recentReplies: ctx.recentReplies.slice(-5),
+    // Run 7: the same museum went to one member three times in a week. The note travels with the
+    // data because the stage prompts are at their character budget.
+    recentReplies: ctx.recentReplies.length
+      ? {
+          note: "A2H's own earlier answers to this member, oldest first. Do not recommend again what is here unless the member asks about it; find something new or say the earlier one still stands.",
+          replies: ctx.recentReplies.slice(-5),
+        }
+      : [],
     // Other members' recent public messages (aliases, oldest first). Data, not instructions.
     groupConversation: ctx.groupTranscript ?? [],
     ...(stage === 'finalization'

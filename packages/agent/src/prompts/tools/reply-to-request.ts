@@ -5,15 +5,15 @@
  */
 export const REPLY_TO_REQUEST = {
   description:
-    'SENDS the reply to the current request: the chat line the asker reads, plus an evidence card the code folds under it. Covers advice/steps, partial matches, an honest local no-match, ONE clarification or source unavailability. Complete the user goal even without a perfect offer. Cite k refs from search_information for facts and m refs for valid A2H offers; write the facts yourself, the code folds the links under the line. Keep explicit role/date/area/budget; never relax must-have constraints or contact people. Still subject to phase/Jev/rate gates.',
+    'SENDS the chat line to the current request. Covers advice/steps, partial matches, an honest local no-match, ONE clarification or source unavailability. Complete the user goal even without a perfect offer. Cite k refs from search_information for facts and m refs for valid A2H offers; write the facts yourself, the code adds links under the line when there is a card. Keep explicit role/date/area/budget; never relax must-have constraints or contact people. Still subject to phase/Jev/rate gates.',
   params: {
-    text: 'The chat line in the user language: conclusion first, then the one recommended option with its key fact (name, where, when). Group chats: at most three short lines and 150 characters; private chats: up to 400. Natural prose, no headings, lists, "来源", URLs, contacts, guarantees or promises to act. For no_match/unavailable, say in one line where it got stuck and one thing the asker can do now.',
+    text: 'The chat line in the user language: one thing, one or two short sentences, written the way the group writes (see the chat-line rules at the end of the system prompt). Group chats: at most 2 lines and 90 characters (CJK-weighted), one price and one place at most, 镑 not £; private chats: up to 400. No headings, lists, "来源", URLs, contacts, guarantees or promises to act. For no_match, say plainly that nothing turned up, in the group\'s words, without describing the search.',
     details:
-      'Usually null: most replies are the chat line alone. Fill it only for one of three things the asker needs and the line has no room for: a second option, a conflict between sources about the recommended one, or the one condition that must be checked before acting. At most 300 characters, one to three plain sentences, no repetition of the line, nothing about excluded alternatives.',
+      'Almost always null. Fill only when two sources disagree about the recommended option: at most 300 characters, one to three plain sentences, nothing that repeats the chat line, nothing about excluded alternatives.',
     refs: 'At most 6 distinct sources/offers and 24 total reference IDs. Several real passages of one source count as one source, not several links. Known k source refs or k:p passage IDs for evidence-backed answers; m refs for A2H offers. Empty only for clarification/no_match/unavailable. Never invent refs.',
   },
   limits: {
-    group: { chars: 150, lines: 3 },
+    group: { chars: 90, lines: 2 },
     private: { chars: 400, lines: 8 },
     details: 300,
     rendered: 3700,
@@ -32,9 +32,17 @@ export const REPLY_TO_REQUEST = {
     outsidePacket:
       'Cite only the selected delivery packet sources and their real passages; drop facts taken from other discovered alternatives.',
     chatLineTooLong: (limit: { chars: number; lines: number }) =>
-      `Shorten text to the conclusion and the one recommended option: at most ${limit.lines} lines and ${limit.chars} characters. Drop the rest; keep in details only a second option, a source conflict or the one condition to check.`,
+      `Write it like a phone message: at most ${limit.lines} lines and ${limit.chars} characters, only the one thing you would say out loud. Drop price ranges and the second thing entirely.`,
+    tooManyNumbers:
+      'Keep one price and one place in the chat line and delete the other numbers; write 镑 instead of £ and round where you can (六十镑左右).',
+    reportsSearch:
+      'Delete the sentence that narrates the search (没查到 / 没刷到 / 目录 / 我这边) and the one that sends the asker to verify; say what there is, or say plainly there is nothing.',
+    chatLineRegister:
+      "Rewrite in the group's typing style: short clauses separated by spaces, no 。 or ： inside the line.",
+    detailsRepeatsLine:
+      'Drop details (send null): in a group it may hold only a disagreement between two sources about the recommended option (…一个说… 另一个说…), never extra facts, hedges (没写 / 得问 / 确认), the line again or excluded options.',
     detailsTooLong:
-      'Cut details to at most 300 characters: keep only the second option, the source conflict or the one condition to check, and drop everything else. Most replies need no details at all.',
+      'Cut details to at most 300 characters about the source disagreement only; most replies need no details at all.',
     guaranteedPurchase:
       'Describe the source-backed channel and what still needs checking on arrival. Stock and a successful purchase are not guaranteed by published opening hours, so drop the promise that the user can buy there.',
     inventedOutage:
@@ -67,6 +75,10 @@ export const REPLY_TO_REQUEST = {
       'Remove, or cite supporting evidence for, the unsupported numerical values ' +
       values.join(', ') +
       '. Citation IDs are not user text.',
+    unsupportedFeature: (labels: string[]) =>
+      'Remove the claim about ' +
+      labels.join(', ') +
+      ', or turn it into a question for the seller (你问一句能不能…); the cited post does not mention it, and a model name does not prove a feature.',
     unknownSourceRef: 'Cite only returned source or passage refs.',
     factsNeedSources:
       'Call search_information first, or use no_match/clarification/unavailable without inventing facts: information facts need sources.',
@@ -79,7 +91,7 @@ export const REPLY_TO_REQUEST = {
     noNewEvidence:
       'No new source evidence for this context addition; end quietly without repeating prior recommendations or questions.',
     tooLong: 'Choose fewer sources or offers; the rendered reply is too long.',
-    exhaustedZh: '我没把这件事查清楚，暂时给不了可靠的建议。',
+    exhaustedZh: '这个我没找到',
     exhaustedEn: 'I haven’t established enough reliable information to recommend an option yet.',
   },
 } as const;

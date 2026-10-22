@@ -4,7 +4,11 @@ import { describe, expect, it, vi } from 'vitest';
 import type { MatchContext } from '../../src/context.js';
 import { bindCurrentRequest } from '../../src/current-request.js';
 import { createKnowledgeSource } from '../../src/knowledge-evidence.js';
-import { replyToRequestTool } from '../../src/tools/reply-to-request.js';
+import {
+  cleanSourceUrl,
+  renderSourceLinks,
+  replyToRequestTool,
+} from '../../src/tools/reply-to-request.js';
 import { taskSchema } from '@matchbot/domain';
 
 function setup(phase: 0 | 1 | 2, ok = true) {
@@ -273,23 +277,154 @@ describe('reply_to_request', () => {
       }),
     );
     expect(result).toContain('400 characters');
-    expect(result).toContain('details');
+    expect(result).toContain('phone message');
     expect(d.repos.outbound.create).not.toHaveBeenCalled();
   });
-  it('holds a group chat line to three lines and 150 characters', async () => {
+  it('holds a group chat line to two lines and 90 weighted characters', async () => {
     const { d, c, t } = setup(0);
     c.groupId = 'g';
     const long = await t.invoke(
       { context: c } as never,
-      JSON.stringify({ ...args, text: '没有NHS number也能注册GP，注册免费。'.repeat(8) }),
+      JSON.stringify({ ...args, text: '没有NHS number也能注册GP 注册免费'.repeat(6) }),
     );
-    expect(long).toContain('150 characters');
+    expect(long).toContain('90 characters');
     const manyLines = await t.invoke(
       { context: c } as never,
-      JSON.stringify({ ...args, text: '一\n二\n三\n四' }),
+      JSON.stringify({ ...args, text: '一\n二\n三' }),
     );
-    expect(manyLines).toContain('3 lines');
+    expect(manyLines).toContain('2 lines');
     expect(d.repos.outbound.create).not.toHaveBeenCalled();
+  });
+  it('sends a group line back when it reads like a report instead of a member message', async () => {
+    const { d } = setup(0);
+    const cases: Array<[string, string]> = [
+      ['没有NHS number也能注册GP。注册免费。先按邮编选诊所。', 'typing style'],
+      ['注册GP要两步：先选诊所', 'typing style'],
+      ['两人£60到£65一小时 最少2小时 周六£69', 'one price'],
+      ['Mile End 附近这次没刷到出打印机的 Bermondsey有一台', 'narrates the search'],
+      ['先按居住邮编选诊所 具体得你跟诊所确认', 'narrates the search'],
+    ];
+    for (const [text, expected] of cases) {
+      // Fresh context per draft: rejections share the outbound retry budget of one run.
+      const fresh = setup(0);
+      fresh.c.groupId = 'g';
+      const result = await fresh.t.invoke(
+        { context: fresh.c } as never,
+        JSON.stringify({ ...args, text }),
+      );
+      expect(result, text).toContain(expected);
+      expect(fresh.d.repos.outbound.create).not.toHaveBeenCalled();
+    }
+    expect(d.repos.outbound.create).not.toHaveBeenCalled();
+  });
+  it('sends a group line alone, with no card and no links, when details is empty', async () => {
+    const { d, c, t } = setup(0);
+    c.groupId = 'g';
+    await t.invoke(
+      { context: c } as never,
+      JSON.stringify({
+        ...args,
+        text: '没有NHS number也能注册GP 注册免费 按邮编选个接受注册的诊所就行',
+      }),
+    );
+    expect(d.repos.outbound.create).toHaveBeenCalledOnce();
+    const [draft] = d.repos.outbound.create.mock.calls[0] as unknown as [{ text: string }];
+    expect(draft.text).toBe('没有NHS number也能注册GP 注册免费 按邮编选个接受注册的诊所就行');
+  });
+  it('sends back a feature the cited post never mentions, but lets the line ask about it', async () => {
+    const printer = {
+      id: 'printer',
+      ref: 'm1',
+      title: 'HP DeskJet 2720e 打印机',
+      description:
+        '出售：全新 HP DeskJet 2720e 打印机，5镑起拍，SE1 Bermondsey，可送到地铁站面交。',
+      priceLabel: '£5',
+      tradeType: 'SELL' as const,
+      status: 'ON_SALE' as const,
+      tags: [],
+      url: 'https://a2hmarket.ai/listings/printer',
+      sourceUrl: null,
+      isRepost: false,
+      availableFrom: null,
+      availableUntil: null,
+      sourcePublishedAt: null,
+      createdAt: '2026-10-16T00:00:00Z',
+    };
+    const plan = {
+      intent: 'second_hand' as const,
+      needs: [{ id: 'p', terms: ['打印机'] }],
+      preferences: [],
+      budget: 60,
+    };
+    const claim = setup(0);
+    claim.c.groupId = 'g';
+    bindCurrentRequest(claim.c, '有没有uu出二手打印机 能连wifi最好 60镑以内');
+    claim.c.marketPlan = plan;
+    claim.c.marketListings = [printer];
+    const rejected = await claim.t.invoke(
+      { context: claim.c } as never,
+      JSON.stringify({
+        kind: 'partial',
+        refs: ['m1'],
+        text: 'Bermondsey有台全新HP 2720e 5镑起拍 能连wifi 你问一句能不能送到mile end',
+      }),
+    );
+    expect(rejected).toContain('wifi');
+    expect(claim.d.repos.outbound.create).not.toHaveBeenCalled();
+    const asks = setup(0);
+    asks.c.groupId = 'g';
+    bindCurrentRequest(asks.c, '有没有uu出二手打印机 能连wifi最好 60镑以内');
+    asks.c.marketPlan = plan;
+    asks.c.marketListings = [printer];
+    await asks.t.invoke(
+      { context: asks.c } as never,
+      JSON.stringify({
+        kind: 'partial',
+        refs: ['m1'],
+        text: 'Bermondsey有台全新HP 2720e 5镑起拍 你问一句能不能连wifi 能不能送到mile end',
+      }),
+    );
+    expect(asks.d.repos.outbound.create).toHaveBeenCalledOnce();
+  });
+  it('rejects group details that repeat the line or discuss excluded options', async () => {
+    const { d, c, t } = setup(0);
+    c.groupId = 'g';
+    const line = '没有NHS number也能注册GP 注册免费 按邮编选个诊所';
+    const repeated = await t.invoke(
+      { context: c } as never,
+      JSON.stringify({
+        ...args,
+        text: line,
+        details: '没有NHS number也能注册GP，注册免费，按邮编选诊所。',
+      }),
+    );
+    expect(repeated).toContain('Drop details');
+    const excluded = await t.invoke(
+      { context: c } as never,
+      JSON.stringify({ ...args, text: line, details: '另一家只招已有NHS number的人。' }),
+    );
+    expect(excluded).toContain('Drop details');
+    expect(d.repos.outbound.create).not.toHaveBeenCalled();
+    // Fresh run: three rejections exhaust one run's outbound retry budget.
+    const plain = setup(0);
+    plain.c.groupId = 'g';
+    const extra = await plain.t.invoke(
+      { context: plain.c } as never,
+      JSON.stringify({ ...args, text: line, details: '诊所一般周一到周五开，带上租房合同。' }),
+    );
+    expect(extra).toContain('Drop details');
+    expect(plain.d.repos.outbound.create).not.toHaveBeenCalled();
+    const conflict = setup(0);
+    conflict.c.groupId = 'g';
+    await conflict.t.invoke(
+      { context: conflict.c } as never,
+      JSON.stringify({
+        ...args,
+        text: line,
+        details: '两个页面写的不一样 一个说周六开 一个说周六关',
+      }),
+    );
+    expect(conflict.d.repos.outbound.create).toHaveBeenCalledOnce();
   });
   it('folds details and source links into an evidence card under the chat line', async () => {
     const { d, c, t } = setup(0);
@@ -1041,5 +1176,25 @@ it('keeps validation feedback in request context when an aborted run cannot pers
     tool: 'reply_to_request',
     count: 1,
     feedback: [expect.stringContaining('999')],
+  });
+});
+
+describe('source link line', () => {
+  // 2026-10-21 run 6: a TaskRabbit result carried a 400-character utm/gclid query into the card.
+  it('drops ad-tracking parameters but keeps the parameters a page needs', () => {
+    expect(
+      cleanSourceUrl(
+        'https://www.taskrabbit.com/services/furniture-disassembly?utm_source=pd_search&utm_medium=ggl&gclid=abc',
+      ),
+    ).toBe('https://www.taskrabbit.com/services/furniture-disassembly');
+    expect(cleanSourceUrl('https://www.xiaohongshu.com/explore/6aa0?xsec_token=YB&utm_x=1')).toBe(
+      'https://www.xiaohongshu.com/explore/6aa0?xsec_token=YB',
+    );
+    expect(cleanSourceUrl('not a url')).toBe('not a url');
+    expect(
+      renderSourceLinks([
+        { title: 'Furniture Disassembly Services', url: 'https://t.co/a?gclid=1' },
+      ]),
+    ).toBe('[Furniture Disassembly Services](https://t.co/a)');
   });
 });

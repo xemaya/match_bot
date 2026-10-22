@@ -2,6 +2,7 @@ import { isActiveMarketListing, hasLondonEvidence } from '@matchbot/websearch';
 import { z } from 'zod';
 import { BUDGET_SCOPES } from '@matchbot/domain';
 import type { MarketListing, MarketIntent } from '@matchbot/websearch';
+import { clockNow } from './clock.js';
 export type MarketNeed = { id: string; terms: string[]; budget?: number; rules?: MarketRules };
 export type MarketRules = {
   preferences: string[];
@@ -440,7 +441,7 @@ function assessSharedMarketListing(
       (m) =>
         m[1] &&
         `${m[1]}-${m[2]!.padStart(2, '0')}-${m[3]!.padStart(2, '0')}` >=
-          new Date().toISOString().slice(0, 10),
+          clockNow().toISOString().slice(0, 10),
     );
     const ambiguousTrip = p.intent === 'carry' && new Set(dates.map((m) => m[0])).size > 1;
     checks.push({
@@ -826,7 +827,7 @@ function carryMonthRange(requestText: string | undefined): MarketPlan['dateRange
     /(?:(20\d{2})年)?(1[0-2]|[1-9])月(?:(\d{1,2})日?)?(初|底|末|上旬|中旬|下旬)?/,
   );
   if (!match) return undefined;
-  const now = new Date(),
+  const now = clockNow(),
     month = Number(match[2]);
   const year = match[1]
     ? Number(match[1])

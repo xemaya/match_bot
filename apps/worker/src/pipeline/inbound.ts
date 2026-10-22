@@ -8,6 +8,7 @@ import {
 } from '@matchbot/agent';
 import type { publishApproval as publishApprovalFn } from '@matchbot/approval';
 import type { Demand } from '@matchbot/db';
+import { splitEvidenceCard } from '@matchbot/domain';
 import type { DemandDraft, InboundMessage, Phase } from '@matchbot/domain';
 import { decideInbound, inboundRuleReason, resolvePhase } from '@matchbot/gating';
 import type { evaluateInbound as evaluateInboundFn } from '@matchbot/jev';
@@ -24,6 +25,10 @@ export interface PipelineDeps extends AgentDeps {
 /** Jev 看的最近上下文条数上限（架构 §3：同一作者最近消息作为弱上下文）。 */
 const RECENT_TEXTS = 5;
 const RECENT_WINDOW_HOURS = 24;
+/** A follow-up not addressed to A2H within this long after its last reply to the member waits. */
+const FOLLOWUP_COOLDOWN_MS = 5 * 60_000;
+/** How far back A2H's own replies to the member are shown to the agent. */
+const RECENT_REPLY_DAYS = 30;
 
 function toPhase(raw: number): Phase {
   return raw === 1 || raw === 2 ? raw : 0;
@@ -211,6 +216,17 @@ export async function processInbound(
         triage = { ...triage, action: 'answer', newCondition: true };
         dropReason = null;
       }
+      // 2026-10-21 run 6: a member refined a favour ask twice within minutes of A2H's reply while
+      // other members were already volunteering; each refinement re-ran research and A2H posted
+      // three times in one thread. A follow-up that is not addressed to A2H waits out a short
+      // cooldown after the last delivery to that member; asking A2H directly still goes through.
+      if (!dropReason && triage.action === 'continue' && !msg.addressedToBot) {
+        // mention_user_id holds the channel id of the addressed member (addressing.ts), not the
+        // internal user id; querying with user.id never matched and the cooldown never fired.
+        const lastSent = await d.repos.outbound.lastSentToUser(msg.chatId, msg.userId);
+        if (lastSent && stored.receivedAt.getTime() - lastSent.getTime() < FOLLOWUP_COOLDOWN_MS)
+          dropReason = 'followup_cooldown';
+      }
       if (dropReason) {
         await trace('gate', stored.id, {
           outcome: 'dropped_by_triage',
@@ -298,7 +314,14 @@ export async function processInbound(
       ...(msg.addressedToBot ? { addressedToBot: true } : {}),
       ...(msg.replyToBotText ? { replyToBotText: msg.replyToBotText } : {}),
       ...(msg.replyToMessageId ? { replyToMessageId: msg.replyToMessageId } : {}),
-      recentReplies: [],
+      // 2026-10-22 run 7: this was always empty, and A2H recommended the same museum to one member
+      // three times across a week. Its own earlier answers to this member, chat line only.
+      recentReplies: (
+        await d.repos.outbound.recentSentToUser(msg.chatId, msg.userId, {
+          since: new Date(Date.now() - RECENT_REPLY_DAYS * 86400e3),
+          limit: 5,
+        })
+      ).map((text) => splitEvidenceCard(text).line.slice(0, 240)),
       groupTranscript,
       ...(open ? { demandId: open.id, demand: toDemandDraft(open) } : {}),
     };

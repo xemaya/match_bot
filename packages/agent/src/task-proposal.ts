@@ -7,6 +7,7 @@ import {
   type UserTask,
 } from '@matchbot/domain';
 import { z } from 'zod';
+import { clockNow } from './clock.js';
 
 const reference = z.string().min(1).max(160);
 const keySchema = z.union([
@@ -281,7 +282,7 @@ export function normalizeTaskPatch(p: {
       condition: c,
       key,
       task: p.task,
-      now: p.now ?? new Date(),
+      now: p.now ?? clockNow(),
     });
     checkDateSource({ value: executable, condition: c, key, task: p.task });
     const scope = budgetScope({ condition: c, key, task: p.task, text: p.text });
@@ -384,13 +385,19 @@ export function normalizeTaskPatch(p: {
       const optionalGap =
         !!constraintKey && !has(constraintKey) && criterion.strength === 'preference';
       // A3, PS5 and similar source-attested subject identifiers are not mutable budgets/dates.
+      // A UK postcode district the user wrote (E14, SE1, SW1A) is a place, not a number, even
+      // when the goal title does not repeat it (2026-10-21 run 6: "从E14出发" lost an ask).
       const labelWithoutSubjectCodes = criterion.label.replace(
         /\b(?:[a-z]+[a-z\d-]*\d[a-z\d-]*|\d+[a-z][a-z\d-]*)\b/gi,
-        (code) =>
-          [goal.title, p.text].every((text) => new RegExp(`\\b${code}\\b`, 'i').test(text)) &&
-          !/^\d+(?:gbp|pounds?|mins?|minutes?|hours?|days?|months?)$/i.test(code)
+        (code) => {
+          const inText = (text: string) => new RegExp(`\\b${code}\\b`, 'i').test(text);
+          const attested =
+            [goal.title, p.text].every(inText) ||
+            (/^[a-z]{1,2}\d[a-z\d]?$/i.test(code) && inText(p.text));
+          return attested && !/^\d+(?:gbp|pounds?|mins?|minutes?|hours?|days?|months?)$/i.test(code)
             ? ''
-            : code,
+            : code;
+        },
       );
       if (!constraintKey && /\d/.test(labelWithoutSubjectCodes))
         throw new TaskProposalError(

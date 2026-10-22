@@ -76,6 +76,38 @@ describe('task proposal normalization', () => {
       ).toThrow('parameter-free');
     },
   );
+  it('keeps a postcode district the user wrote in an unbound label even when the title omits it', () => {
+    const input = taskPatchProposalSchema.parse({
+      goals: [
+        {
+          id: 'trip',
+          title: 'Epping Forest周日徒步交通',
+          required: true,
+          sourceQuote: '周日想去Epping Forest走走',
+          criteria: [
+            { id: 'origin', label: '从E14出发少换乘', strength: 'hard', constraintKey: null },
+          ],
+        },
+      ],
+      constraints: [],
+    });
+    // Accepted: the unbound criterion folds into the goal's subject line instead of being rejected.
+    expect(() =>
+      normalizeTaskPatch({
+        input,
+        task,
+        text: '周日想去Epping Forest走走 有人一起吗 另外从E14过去坐什么最方便 不想换太多次车',
+      }),
+    ).not.toThrow();
+    // A code the user never wrote is still an unattested value.
+    expect(() =>
+      normalizeTaskPatch({
+        input,
+        task,
+        text: '周日想去Epping Forest走走 坐什么最方便',
+      }),
+    ).toThrow('parameter-free');
+  });
   it.each(['室内还是室外？', '不在室内', '室内的也行'])(
     'does not manufacture a hard indoor requirement from %s',
     (text) => {

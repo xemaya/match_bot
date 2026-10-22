@@ -3,6 +3,7 @@ import type { MarketCandidate } from './market-research.js';
 import type { UserTask } from '@matchbot/domain';
 import { assessTaskMarketListing } from './task-market-assessment.js';
 import { assessMarketListing, type MarketAssessment, type MarketPlan } from './market-strategy.js';
+import { clockNow } from './clock.js';
 export type MarketChoice = {
   listing: MarketCandidate;
   assessment: MarketAssessment;
@@ -95,7 +96,7 @@ export function buildMarketChoices(p: {
   const rows = p.candidates
     .filter(
       (listing) =>
-        isActiveMarketListing(listing, new Date(), { respectAvailability: false }) &&
+        isActiveMarketListing(listing, clockNow(), { respectAvailability: false }) &&
         hasLondonEvidence(listing),
     )
     .map((listing): MarketChoice => {

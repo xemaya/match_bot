@@ -79,11 +79,13 @@ export async function prepareTaskTurn(p: {
     });
     // 2026-10-21 run 5: a 45 s abort on the planning call dropped a printer ask for good, and its
     // follow-up then had no task to continue. One retry when the deadline still allows it.
+    // Run 6: two rejected proposals in a row silently lost an ask (and its follow-up then bound to
+    // the member's other open task); a third turn lets the model repair the second rejection.
     for (let attempt = 0; ; attempt++) {
       try {
         await runner.run(agent, p.input, {
           context: p.ctx,
-          maxTurns: 2,
+          maxTurns: 3,
           signal: AbortSignal.any([p.signal, AbortSignal.timeout(45000)]),
         });
         break;

@@ -80,7 +80,7 @@ describe('reply length is specified once, in the chat-line voice', () => {
       await prompt({ finalAnswerOnly: true }).then((t) => t.replace(CHAT_LINE, '')),
     ].join('\n');
     expect(elsewhere).not.toMatch(/two short paragraphs|three short lines|120 Chinese/);
-    expect(CHAT_LINE).toContain('150 字');
+    expect(CHAT_LINE).toContain('90 字');
     expect(CHAT_LINE).toContain('300 字');
     expect(CHAT_LINE).not.toContain('700');
   });
@@ -99,8 +99,8 @@ describe('tool feedback leads with the fix', () => {
     const text = collectToolText(TOOL_PROMPTS['reply_to_request']!).find(
       ([key]) => key === 'feedback.chatLineTooLong(…)',
     )?.[1];
-    expect(text).toMatch(/^Shorten text/);
-    expect(text).toContain('details');
+    expect(text).toMatch(/^Write it like a phone message/);
+    expect(text).toContain('only the one thing');
   });
 });
 

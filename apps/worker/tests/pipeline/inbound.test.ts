@@ -37,7 +37,11 @@ function makeDeps(over: Record<string, unknown> = {}) {
     recentByUser: vi.fn(() => Promise.resolve([])),
     recentInGroup: vi.fn(() => Promise.resolve([])),
   };
-  const outbound = { recentSentToTarget: vi.fn(() => Promise.resolve([])) };
+  const outbound = {
+    recentSentToTarget: vi.fn(() => Promise.resolve([])),
+    lastSentToUser: vi.fn((): Promise<Date | null> => Promise.resolve(null)),
+    recentSentToUser: vi.fn((): Promise<string[]> => Promise.resolve([])),
+  };
   const demands = {
     findOpenByUser: vi.fn(() => Promise.resolve([])),
     create: vi.fn(() => Promise.resolve({ id: 'd1' })),
@@ -481,6 +485,48 @@ describe('processInbound — JEV_POLICY=off triage', () => {
       category: 'second_hand',
       kind: 'demand',
     });
+  });
+  it('holds a refinement sent to the group minutes after A2H replied, unless A2H is addressed', async () => {
+    const t = offDeps(verdict({ action: 'continue', newCondition: true, category: 'man_and_van' }));
+    const outbound = (t.repos as { outbound: { lastSentToUser: ReturnType<typeof vi.fn> } })
+      .outbound;
+    outbound.lastSentToUser.mockResolvedValue(new Date(Date.now() - 90_000));
+    await processInbound(t.deps as never, msg);
+    // The column holds the channel (Telegram) id the reply was addressed to, not the internal id.
+    expect(outbound.lastSentToUser).toHaveBeenCalledWith(msg.chatId, msg.userId);
+    expect(t.runInbound).not.toHaveBeenCalled();
+    expect(traceWith(t.traces, 'dropped_by_triage').output['reason']).toBe('followup_cooldown');
+
+    const direct = offDeps(
+      verdict({ action: 'continue', newCondition: true, category: 'man_and_van' }),
+    );
+    (
+      direct.repos as { outbound: { lastSentToUser: ReturnType<typeof vi.fn> } }
+    ).outbound.lastSentToUser.mockResolvedValue(new Date(Date.now() - 90_000));
+    await processInbound(direct.deps as never, { ...msg, addressedToBot: true });
+    expect(direct.runInbound).toHaveBeenCalled();
+
+    const later = offDeps(
+      verdict({ action: 'continue', newCondition: true, category: 'man_and_van' }),
+    );
+    (
+      later.repos as { outbound: { lastSentToUser: ReturnType<typeof vi.fn> } }
+    ).outbound.lastSentToUser.mockResolvedValue(new Date(Date.now() - 20 * 60_000));
+    await processInbound(later.deps as never, msg);
+    expect(later.runInbound).toHaveBeenCalled();
+  });
+  it("shows the agent A2H's own recent replies to this member, chat line only", async () => {
+    const t = offDeps(verdict({ action: 'answer', category: 'other' }));
+    (
+      t.repos as { outbound: { recentSentToUser: ReturnType<typeof vi.fn> } }
+    ).outbound.recentSentToUser.mockResolvedValue(['Young V&A 免费室内\n\n\u2063\n卡片细节']);
+    await processInbound(t.deps as never, msg);
+    const call = t.runInbound.mock.calls[0]![0] as { ctx: { recentReplies: string[] } };
+    expect(call.ctx.recentReplies).toEqual(['Young V&A 免费室内']);
+    expect(
+      (t.repos as { outbound: { recentSentToUser: ReturnType<typeof vi.fn> } }).outbound
+        .recentSentToUser,
+    ).toHaveBeenCalledWith(msg.chatId, msg.userId, expect.anything());
   });
   it('a continuation with a new condition enters as a follow-up', async () => {
     const t = offDeps(verdict({ action: 'continue', newCondition: true, category: 'second_hand' }));

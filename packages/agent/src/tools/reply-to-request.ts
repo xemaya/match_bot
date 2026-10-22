@@ -69,16 +69,121 @@ export function sourceLabel(title: string, url: string): string {
   }
   return label.length > 32 ? label.slice(0, 31).trimEnd() + '…' : label;
 }
-export function renderSourceLinks(sources: ReadonlyArray<{ title: string; url: string }>): string {
-  return sources.map((s) => '[' + sourceLabel(s.title, s.url) + '](' + s.url + ')').join(' · ');
+/** Ad-tracking query keys carried by search results; the page is the same without them. */
+const TRACKING_PARAMS =
+  /^(?:utm_\w+|gclid|gclsrc|dclid|fbclid|msclkid|yclid|mc_cid|mc_eid|_ga|igshid)$/i;
+export function cleanSourceUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const keys = [...parsed.searchParams.keys()].filter((k) => TRACKING_PARAMS.test(k));
+    if (!keys.length) return url;
+    for (const key of keys) parsed.searchParams.delete(key);
+    return parsed.toString().replace(/\?$/, '');
+  } catch {
+    return url;
+  }
+}
+export function renderSourceLinks(
+  sources: ReadonlyArray<{ title: string; url: string }>,
+  opts: { hostnameOver?: number } = {},
+): string {
+  return sources
+    .map((s) => {
+      let label = sourceLabel(s.title, s.url);
+      if (opts.hostnameOver && !/\p{Script=Han}/u.test(label) && label.length > opts.hostnameOver)
+        label = new URL(s.url).hostname.replace(/^www\./, '');
+      return '[' + label + '](' + cleanSourceUrl(s.url) + ')';
+    })
+    .join(' · ');
 }
 /** Group members read the line on a phone; the card is folded under it. */
 function chatLineLimit(ctx: MatchContext): { chars: number; lines: number } {
   return ctx.groupId ? LIMITS.group : LIMITS.private;
 }
+/** CJK characters count 1, a run of Latin letters/digits counts half its length, spaces nothing:
+ * a shop name like "Super Man with a Van" must not eat a group line's budget. */
+export function weightedLength(text: string): number {
+  let n = 0;
+  for (const m of text.matchAll(/[A-Za-z0-9£$€.,'’/-]+|\s+|./gsu)) {
+    const token = m[0];
+    if (/^\s+$/.test(token)) continue;
+    n += /^[A-Za-z0-9£$€.,'’/-]+$/.test(token) ? token.length / 2 : 1;
+  }
+  return Math.ceil(n);
+}
 function exceedsChatLine(text: string, limit: { chars: number; lines: number }): boolean {
   const lines = text.split('\n').filter((line) => line.trim()).length;
-  return text.length > limit.chars || lines > limit.lines;
+  return weightedLength(text) > limit.chars || lines > limit.lines;
+}
+/** Arabic numbers that are not a date, a clock time or part of a postcode / model name. */
+export function bareNumberCount(text: string): number {
+  let n = 0;
+  for (const m of text.matchAll(/\d+(?:[.,:]\d+)?/g)) {
+    const before = text[m.index - 1] ?? '';
+    const after = text.slice(m.index + m[0].length, m.index + m[0].length + 1);
+    if (/[A-Za-z]/.test(before) || /[A-Za-z]/.test(after) || /[号月日点分]/.test(after)) continue;
+    if (m[0].includes(':')) continue;
+    n++;
+  }
+  return n;
+}
+export const SEARCH_REPORT_PHRASES =
+  /没查到|没刷到|没找到|目录|公开页面|我这边没|得你(?:自己|跟|去)?.{0,4}?(?:确认|问|选|核实)/;
+/**
+ * Features a reply states as fact must appear in the cited evidence (the asker's own words do not
+ * count). Asking the seller ("你问一句能不能连wifi") is not a claim.
+ */
+const FEATURE_CLAIMS: ReadonlyArray<{ label: string; claim: RegExp; evidence: RegExp }> = [
+  { label: 'wifi', claim: /wifi|wi-fi|无线|wireless/i, evidence: /wifi|wi-fi|无线|wireless/i },
+  {
+    label: 'bills included',
+    claim: /包\s*bill|含\s*bill|包水电|bills?\s*(?:are\s*)?(?:included|incl)/i,
+    evidence: /包\s*bill|含\s*bill|包水电|包括账单|账单全包|bills?\s*(?:are\s*)?(?:included|incl)/i,
+  },
+];
+export function unsupportedFeatureClaims(text: string, evidence: string): string[] {
+  const out: string[] = [];
+  for (const f of FEATURE_CLAIMS) {
+    const mentions = [...text.matchAll(new RegExp(f.claim.source, 'gi'))];
+    if (!mentions.length || f.evidence.test(evidence)) continue;
+    // One hedge or question about the feature means the draft is not asserting it.
+    const hedged = mentions.some((m) => {
+      const before = text.slice(Math.max(0, m.index - 10), m.index);
+      const after = text.slice(m.index + m[0].length, m.index + m[0].length + 8);
+      // A question or hedge must be about this feature: before it, or right after it.
+      return (
+        /能不能|是否|问|不知道|没写|不清楚|有没有|支不支持|没有确认|未确认|没确认|不确定|待确认|核对/.test(
+          before,
+        ) ||
+        /^.{0,3}(?:吗|？|\?)|^.{0,6}(?:没有确认|未确认|没确认|不确定|待确认|核对|没写|不清楚)/.test(
+          after,
+        )
+      );
+    });
+    if (!hedged) out.push(f.label);
+  }
+  return out;
+}
+/** Group details may only carry a disagreement between sources: hedges ("没写…得问"), excluded
+ * options and restatements of the line all go back. */
+export const SOURCE_DISAGREEMENT =
+  /不一样|不一致|不同|一个说|另一个说|一说|说法|对不上|写的是.{0,12}(?:但|却)|写.{0,6}(?:但|却).{0,6}写/;
+export function detailsRepeatsLine(line: string, details: string): boolean {
+  if (/只招|不符合|不在你|排除|赶不上|来不及|没写|得问|要问|得跟|确认|核实/.test(details))
+    return true;
+  if (!SOURCE_DISAGREEMENT.test(details)) return true;
+  const grams = (t: string) => {
+    const cjk = t.replace(/[^\p{Script=Han}]/gu, '');
+    const out = new Set<string>();
+    for (let i = 0; i + 1 < cjk.length; i++) out.add(cjk.slice(i, i + 2));
+    return out;
+  };
+  const a = grams(line),
+    b = grams(details);
+  if (!b.size) return false;
+  let shared = 0;
+  for (const g of b) if (a.has(g)) shared++;
+  return shared / b.size > 0.3;
 }
 
 function claimsUnknownTotalFits(text: string, evidence: string): boolean {
@@ -125,6 +230,7 @@ function renderMarketRefs(
   ctx: MatchContext,
   refs: string[],
   zh: boolean,
+  primaryOnly = false,
 ): {
   text: string;
   names: Record<string, string>;
@@ -186,9 +292,14 @@ function renderMarketRefs(
       evidence: evidence || n.description.slice(0, 180),
     };
   });
+  // In a group the card shows one lead worth clicking (a backup only when nothing is primary).
+  const shownRows = primaryOnly
+    ? (choices.primary.length ? choices.primary : choices.backup).slice(0, 1)
+    : [...choices.primary, ...choices.backup];
+  const shownRefs = new Set(shownRows.map((row) => row.listing.ref));
   const rendered = renderMarketChoiceReply({
-    listings: usable,
-    selections,
+    listings: usable.filter((n) => shownRefs.has(n.ref)),
+    selections: selections.filter((sel) => shownRefs.has(sel.ref)),
     plan: ctx.marketPlan,
     zh,
     assessWholeOffer: true,
@@ -303,6 +414,17 @@ export function replyToRequestTool(deps: AgentDeps) {
       const limit = chatLineLimit(ctx);
       if (exceedsChatLine(args.text, limit)) return { error: FEEDBACK.chatLineTooLong(limit) };
       if ((args.details?.length ?? 0) > LIMITS.details) return { error: FEEDBACK.detailsTooLong };
+      if (ctx.groupId) {
+        // P51: the group line is typed like a member's message, says one thing, and never
+        // narrates the search. Deterministic gates; the prompt alone did not hold (9/9 in run 7).
+        if ((args.text.match(/。/g) ?? []).length >= 2 || args.text.includes('：'))
+          return { error: FEEDBACK.chatLineRegister };
+        if (bareNumberCount(args.text) > 2 || (args.text.match(/£|镑/g) ?? []).length > 1)
+          return { error: FEEDBACK.tooManyNumbers };
+        if (SEARCH_REPORT_PHRASES.test(prose(args))) return { error: FEEDBACK.reportsSearch };
+        if (args.details && detailsRepeatsLine(args.text, args.details))
+          return { error: FEEDBACK.detailsRepeatsLine };
+      }
       // The budget is six sources, not six excerpts. Validate every exact passage below;
       // never normalize away a fabricated passage to make it look like a valid source.
       const sourceRefs = new Set(args.refs.map((ref) => ref.replace(/:p\d+$/, '')));
@@ -349,7 +471,7 @@ export function replyToRequestTool(deps: AgentDeps) {
       let evidence: string[] = [];
       if (market.length) {
         if (market.length !== args.refs.length) return { error: FEEDBACK.mixedRefs };
-        const rendered = renderMarketRefs(ctx, market, zh);
+        const rendered = renderMarketRefs(ctx, market, zh, !!ctx.groupId);
         if (!rendered) return { error: FEEDBACK.offerIneligible(marketChoiceFeedback(ctx)) };
         const inline = prose(args).match(/\bm\d+\b/g) ?? [];
         if (inline.some((ref) => !market.includes(ref)))
@@ -380,6 +502,8 @@ export function replyToRequestTool(deps: AgentDeps) {
         const support = rendered.evidence.join('\n') + '\n' + (ctx.currentRequest?.text ?? '');
         const unsupported = unsupportedNumericClaims(prose(args), support, market.length);
         if (unsupported.length) return { error: FEEDBACK.unsupportedNumbers(unsupported) };
+        const features = unsupportedFeatureClaims(prose(args), rendered.evidence.join('\n'));
+        if (features.length) return { error: FEEDBACK.unsupportedFeature(features) };
         card = [args.details, rendered.text];
         evidence = rendered.evidence;
       } else {
@@ -408,6 +532,9 @@ export function replyToRequestTool(deps: AgentDeps) {
         const unsupported = unsupportedNumericClaims(prose(args), support, new Set(sources).size);
         if (args.kind !== 'clarification' && unsupported.length)
           return { error: FEEDBACK.unsupportedNumbers(unsupported) };
+        const features = unsupportedFeatureClaims(prose(args), evidence.join('\n'));
+        if (args.kind !== 'clarification' && features.length)
+          return { error: FEEDBACK.unsupportedFeature(features) };
         if (
           ['answer', 'partial'].includes(args.kind) &&
           /免费|free entry/i.test(prose(args)) &&
@@ -418,8 +545,13 @@ export function replyToRequestTool(deps: AgentDeps) {
           if (!ctx.sourceFailures?.length) return { error: FEEDBACK.noRecordedOutage };
         }
         const unique = [...new Set(sources.filter((s) => !!s))];
-        const links = renderSourceLinks(unique);
-        card = [args.details, links];
+        // P51: in a group the card exists only when details does; then at most two links. Refs
+        // still go to the gate trace below. Private chats keep every link.
+        card = ctx.groupId
+          ? args.details
+            ? [args.details, renderSourceLinks(unique.slice(0, 2), { hostnameOver: 24 })]
+            : []
+          : [args.details, renderSourceLinks(unique)];
       }
       if (
         !market.length &&

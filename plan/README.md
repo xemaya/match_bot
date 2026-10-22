@@ -1,3 +1,5 @@
+P51：那句话像群里的人——评审排序 1–5 的改法（90 字 2 行、不汇报检索、群聊语域、卡是例外、冷却 id 修复），每项用 `pnpm humanness` 回路出数；见 [P51-chat-line-like-a-member.md](./P51-chat-line-like-a-member.md)。
+P50：人感回路——`pnpm humanness` 导出实发回复、算可数指标、路由器判官盲判、解密研究快照只重跑收尾阶段，不进群就能反复试；见 [P50-humanness-loop.md](./P50-humanness-loop.md)。
 P49：证据卡改为例外（去【详情】标题、来源改无标签链接行、details ≤300、群记录只喂那句话），0.33.0；见 [P49-evidence-card-as-exception.md](./P49-evidence-card-as-exception.md)。
 P48：提示词按读者分层（voice / policy / stages / tools），`pnpm prompt:audit` 把各阶段全文 dump 到 docs/prompts，`reply_to_request` 拆成群聊那句话 + 折叠证据卡，0.32.0；见 [P48-prompt-layers-and-chat-line.md](./P48-prompt-layers-and-chat-line.md)。
 
@@ -77,6 +79,8 @@ P36：Jev targeted 策略与本地无 Telegram 对话验证，Codex 本地实现
 | P43 | 网页核验Telegram回归 | [P43-web-telegram-regression.md](./P43-web-telegram-regression.md) | P42 | 8 | codex | 完成 | 0.29.0；401145token/6条均回复；8读页6成功，保留缺口 | 2026-10-19 |
 | P48 | 提示词分层目录、群聊发言与证据卡拆分 | [P48-prompt-layers-and-chat-line.md](./P48-prompt-layers-and-chat-line.md) | 0.31.0 工作树 | 11 | claude | 评审中 | 0.32.0：voice/policy/stages/tools 目录、prompt:audit 全文 dump、text+details 折叠证据卡 | 2026-10-21 |
 | P49 | 证据卡改为例外、去标签去来源行 | [P49-evidence-card-as-exception.md](./P49-evidence-card-as-exception.md) | P48 | 9 | claude | 评审中 | 0.33.0：不可见分隔行折叠、无标签链接行、details ≤300、群记录只喂那句话 | 2026-10-21 |
+| P50 | 人感回路：指标、判官、收尾回放 | [P50-humanness-loop.md](./P50-humanness-loop.md) | P49 | 8 | claude | 评审中 | `pnpm humanness` export/metrics/judge/freeze/replay | 2026-10-22 |
+| P51 | 那句话像群里的人（排序 1–5） | [P51-chat-line-like-a-member.md](./P51-chat-line-like-a-member.md) | P50 | 7 | claude | 评审中 | 90 字 2 行、reportsSearch / tooManyNumbers / chatLineRegister 门、群聊无 details 不出卡、冷却 id | 2026-10-22 |
 
 ## 波次与并行
 

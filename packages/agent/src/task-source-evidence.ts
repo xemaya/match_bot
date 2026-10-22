@@ -9,6 +9,7 @@ import { getMarketSourceIdentity } from './market-choices.js';
 import { getXhsNoteKey } from './xhs-research.js';
 import { getXhsPassages } from './xhs-evidence.js';
 import type { SourceClaim } from '@matchbot/jev';
+import { clockNow } from './clock.js';
 
 const id = z.string().min(1).max(160);
 export const taskSourceCheckSchema = z.strictObject({
@@ -89,7 +90,7 @@ function getSource(ctx: MatchContext, check: Check, ref: string): Source {
       throw new TaskEvidenceError('source has the wrong trade direction');
     if (
       check.status === 'supported' &&
-      !isActiveMarketListing(listing, new Date(), { respectAvailability: false })
+      !isActiveMarketListing(listing, clockNow(), { respectAvailability: false })
     )
       throw new TaskEvidenceError('source is explicitly inactive');
     const labels: Record<string, string> = {
@@ -206,7 +207,7 @@ export function buildTaskProgress(
   if (args.next.action === 'ask_user' && !args.next.constraintKey)
     throw new TaskEvidenceError('a question requires one specific missing condition');
   const evidence = new Map<string, z.infer<typeof taskProgressSchema>['evidence'][number]>();
-  const now = new Date().toISOString();
+  const now = clockNow().toISOString();
   const contextProofs = new Map<
     string,
     {
@@ -338,7 +339,7 @@ export function buildTaskProgress(
     if (p.ctx.marketDetailIds?.includes(listing.id))
       refreshed.set('market:' + listing.id, {
         text: listing.title + '\n' + listing.description,
-        usable: isActiveMarketListing(listing, new Date(), { respectAvailability: false }),
+        usable: isActiveMarketListing(listing, clockNow(), { respectAvailability: false }),
       });
   for (const source of p.ctx.knowledgeSources ?? [])
     refreshed.set('web:' + hashText(source.url).slice(0, 32), { text: source.text, usable: true });

@@ -10,3 +10,6 @@ coverage
 logs/
 scripts/seed/data.json
 scripts/seed/verified.json
+# P50: exported group text and decrypted research packets stay local
+packages/eval/fixtures/humanness/rounds/
+packages/eval/fixtures/humanness/cases/

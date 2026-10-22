@@ -536,5 +536,41 @@ export function outboundRepo(prisma: PrismaClient, accountId = '') {
         select: { id: true, text: true, kind: true, sentAt: true },
       });
     },
+    /** When A2H last delivered a reply addressed to this member in this chat; null when never. */
+    async lastSentToUser(target: string, mentionUserId: string): Promise<Date | null> {
+      const row = await prisma.outboundMessage.findFirst({
+        where: {
+          target,
+          mentionUserId,
+          status: 'sent',
+          kind: { not: 'reaction' },
+          sentAt: { not: null },
+        },
+        orderBy: { sentAt: 'desc' },
+        select: { sentAt: true },
+      });
+      return row?.sentAt ?? null;
+    },
+
+    /** Texts A2H actually sent to this member in this chat lately, oldest first. */
+    async recentSentToUser(
+      target: string,
+      mentionUserId: string,
+      p: { since: Date; limit: number },
+    ): Promise<string[]> {
+      const rows = await prisma.outboundMessage.findMany({
+        where: {
+          target,
+          mentionUserId,
+          status: 'sent',
+          kind: { not: 'reaction' },
+          sentAt: { gte: p.since },
+        },
+        orderBy: { sentAt: 'desc' },
+        take: p.limit,
+        select: { text: true },
+      });
+      return rows.map((r) => r.text).reverse();
+    },
   };
 }

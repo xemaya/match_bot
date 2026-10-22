@@ -14,3 +14,7 @@ export { triageInbound, type TriageOutcome, type TriageVerdict } from './triage.
 export { loadGroupTranscript, buildGroupTranscript, type GroupLine } from './group-context.js';
 
 export { createDeepSeekSearch } from './deepseek-search.js';
+// P50 humanness loop (packages/eval): freeze a real run's research packet and replay finalization only.
+export { researchContextSchema, restoreSearchContext } from './restore-search-context.js';
+export { buildDeliveryPacket } from './delivery-context.js';
+export { bindTaskMarketPlan } from './task-market-plan.js';

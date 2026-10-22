@@ -277,14 +277,21 @@ async function runProposal(p: {
     return result;
   } catch (error) {
     ctx.taskPlanFailures = (ctx.taskPlanFailures ?? 0) + 1;
-    await record(deps, ctx, error instanceof Error ? error.name : 'unknown_error');
     // No SQL/API error detail or user text enters the trace or the model-visible fallback.
+    // Proposal/transition rule texts and zod paths are parameter-free, so the trace keeps them:
+    // 2026-10-21 run 6 lost an ask to two rejected proposals nobody could diagnose afterwards.
     const feedback =
       error instanceof TaskProposalError || error instanceof TaskTransitionError
         ? error.message
         : error instanceof z.ZodError
           ? error.issues.map((issue) => issue.path.join('.') + ':' + issue.code).join('; ')
           : PLAN_TASK.feedback.fallback;
+    await record(
+      deps,
+      ctx,
+      error instanceof Error ? error.name : 'unknown_error',
+      feedback === PLAN_TASK.feedback.fallback ? undefined : feedback,
+    );
     return PLAN_TASK.feedback.rejected(feedback);
   }
 }
@@ -391,7 +398,7 @@ export function taskPlanningTools(deps: AgentDeps, text: string, taskRefs?: stri
     acknowledge,
   ];
 }
-async function record(deps: AgentDeps, ctx: MatchContext, decision: string) {
+async function record(deps: AgentDeps, ctx: MatchContext, decision: string, detail?: string) {
   await deps.repos.traces.create({
     kind: 'gate',
     inputRef: ctx.sourceMessageId,
@@ -405,6 +412,7 @@ async function record(deps: AgentDeps, ctx: MatchContext, decision: string) {
       revision: ctx.task?.revision ?? null,
       attempt: ctx.taskPlanFailures ?? 0,
       scopedCandidateCount: ctx.taskCandidates?.length ?? 0,
+      ...(detail ? { detail: detail.slice(0, 300) } : {}),
     },
   });
 }
