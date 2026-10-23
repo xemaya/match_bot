@@ -43,7 +43,7 @@ const group = await repos.groups.findByExternal('telegram', GROUP);
 if (!group) throw new Error('group not found');
 const policy = {
   isActive: group.isActive,
-  phase: (group.phase === 1 || group.phase === 2 ? group.phase : 0),
+  phase: group.phase === 1 || group.phase === 2 ? group.phase : 0,
   rateLimitPerDay: group.rateLimitPerDay ?? 30,
 };
 await repos.groups.setPolicy({ channel: 'telegram', externalId: GROUP, ...policy, phase: 0 });
