@@ -403,6 +403,33 @@ export function tasksRepo(prisma: PrismaClient) {
       });
       return rows.map(readTask);
     },
+    /**
+     * P53: A2H's open threads in one chat, across members, newest first. Read-only group view for
+     * the main agent; callers show objectives by member alias, never ids.
+     */
+    async findOpenInChat(input: {
+      channel: 'telegram' | 'whatsapp';
+      chatId: string;
+      limit: number;
+    }): Promise<UserTask[]> {
+      const p = z
+        .object({
+          channel: z.enum(['telegram', 'whatsapp']),
+          chatId: z.string().min(1),
+          limit: z.number().int().min(1).max(20),
+        })
+        .parse(input);
+      const rows = await prisma.task.findMany({
+        where: {
+          channel: p.channel,
+          chatId: p.chatId,
+          status: { notIn: ['completed', 'cancelled', 'expired'] },
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: p.limit,
+      });
+      return rows.map(readTask);
+    },
     async deleteInactiveBefore(input: Date): Promise<number> {
       const cutoff = z.date().parse(input);
       const result = await prisma.task.deleteMany({

@@ -74,6 +74,17 @@ export function messagesRepo(prisma: PrismaClient) {
         take: Math.min(Math.max(1, p.limit), 100),
       });
     },
+    /**
+     * P53 freshness: group messages stored after a run started, oldest first. Uses insert time, not
+     * receivedAt, so a replay that re-inserts old asks never sees the original round's later lines.
+     */
+    createdInGroupSince(groupId: string, p: { since: Date; limit: number }): Promise<Message[]> {
+      return prisma.message.findMany({
+        where: { groupId, text: { not: '' }, createdAt: { gt: p.since } },
+        orderBy: { createdAt: 'asc' },
+        take: Math.min(Math.max(1, p.limit), 50),
+      });
+    },
     async redactOlderThan(days: number): Promise<number> {
       const r = await prisma.message.updateMany({
         where: {

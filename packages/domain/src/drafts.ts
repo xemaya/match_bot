@@ -43,6 +43,10 @@ export const supplyDraftSchema = z.object({
 });
 export type SupplyDraft = z.infer<typeof supplyDraftSchema>;
 
+/** P55: the code-set "looking at it" reaction on a direct ask, and the sentinel that withdraws it. */
+export const ACK_REACTION = '👀';
+export const REACTION_CLEAR = 'clear';
+
 export const outboundDraftSchema = z.object({
   channel: z.enum(OUTBOUND_CHANNELS),
   target: z.string().min(1),

@@ -1,3 +1,4 @@
+import { REACTION_CLEAR } from '@matchbot/domain';
 import { describe, expect, it, vi } from 'vitest';
 import { createTelegramSender, TelegramSendError, withMention } from '../src/sender.js';
 import { Api, GrammyError } from 'grammy';
@@ -247,6 +248,22 @@ describe('reactions', () => {
     );
     expect(setMessageReaction).toHaveBeenCalledWith(-100, 77, [{ type: 'emoji', emoji: '👍' }]);
     expect(sendMessage).not.toHaveBeenCalled();
+  });
+  it('withdraws A2H’s reaction when the text is the clear sentinel (P55)', async () => {
+    const setMessageReaction = vi.fn(() => Promise.resolve(true));
+    await createTelegramSender({
+      bot: { api: { setMessageReaction } } as never,
+      logger,
+    }).send(
+      {
+        ...(msg as object),
+        kind: 'reaction',
+        text: REACTION_CLEAR,
+        replyToMessageId: '77',
+      } as never,
+      authorized,
+    );
+    expect(setMessageReaction).toHaveBeenCalledWith(-100, 77, []);
   });
   it('fails loudly when a reaction has no target message', async () => {
     await expect(
