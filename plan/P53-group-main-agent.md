@@ -21,7 +21,7 @@ P51 之后可数指标 11/11 达标、判官 3.94，但盲判命中率仍 1.0。
 
 ```
 群消息 ─▶ 代码门（黑名单 / 群激活 / 阶段，不变）
-        ─▶ triage（不变：便宜的召回型过滤；第七轮 349 条里 307 条在这里结束）
+        ─▶ triage（不变：便宜的召回型过滤；第七轮实发 340 条里 307 条在这里结束）
         ─▶ planner（P52，不变：绑定任务）
         ─▶ 主 agent「群里的 A2H」（唯一有 voice、唯一挂出站工具）
              读：群视图（见下）+ 当前消息 + 任务
@@ -42,7 +42,7 @@ P51 之后可数指标 11/11 达标、判官 3.94，但盲判命中率仍 1.0。
    - `refer_member(alias, text)`：点名一个群友。门：`alias` 必须出现在 `conversation` 或 `peerOffers` 里且不是当前提问者、6 h 内说过与当前主题相关的话；text 不得复述该成员没公开说过的事。渲染：模型只写别名，出站渲染把别名换成 Telegram `text_mention` 实体（`packages/channel-telegram/src/sender.ts` 已用它 @ 提问者，扩展为可带第二个被点名成员；`outbound_messages` 需能存第二个 mention 的成员 id），模型永远拿不到显示名或渠道 id。
    - `stay_silent(reason)`：即现在的 `do_nothing`，改名只在主 agent 内；reason 进 trace。
 5. **写前新鲜度检查。** 入站 lease 按用户串行，同一群两个成员的消息会并发处理；研究可能持续一两分钟。主 agent 调出站工具时，`needsApproval` 之前重新读群记录：如果本 run 开始后群里出现了与当前任务相关的新行（他人已答 / 提问者已说"搞定了" / A2H 已在这条线发过言），出站工具返回 `stale_context` 与新行，主 agent 再走一轮（只能 `stay_silent` / `say_briefly` / 改写），最多一次。不做按群加锁，避免研究期间整个群排队。
-6. **开不开口集中到主 agent。** `ambiguous_unsolicited`、`canSkipSupplementReply`、研究员 `skip` 这些局部规则改为主 agent 数据包里的事实（"这条不是对你说的""你 3 分钟前刚回过这条线"），由主 agent 决定，代码只保留硬约束（冷却、频控、Phase）。triage 的 `handledByMembers` 丢弃保留不动——它省掉了 248/349 次进 agent。
+6. **开不开口集中到主 agent。** `ambiguous_unsolicited`、`canSkipSupplementReply`、研究员 `skip` 这些局部规则改为主 agent 数据包里的事实（"这条不是对你说的""你 3 分钟前刚回过这条线"），由主 agent 决定，代码只保留硬约束（冷却、频控、Phase）。triage 的 `handledByMembers` 丢弃保留不动——它省掉了 248/340 次进 agent。
 7. **提示词。** 新阶段 `main`：trust + fact + delivery + 群协议（何时沉默、何时只接半句、何时点名、何时研究）+ voice。预算 ≤ 8000 字（与执行阶段相同），`pnpm prompt:audit` 加 `main`。群协议里不放可照抄的中文范例句（P51 教训）。
 
 ## 需要用户拍板

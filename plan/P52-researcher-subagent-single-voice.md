@@ -6,14 +6,14 @@
 
 ## 为什么
 
-2026-10-22 架构评审（第七轮联合实测 `tg-students-match-20261021-run7-ch3..ch10`，0.35.0，42 条进 agent，33 条出站）：
+2026-10-22 架构评审，数据取第七轮联合实测的实发部分（2026-10-22 00:00–01:59 与 07:00–14:59 UTC，0.35.0 前后，sent 行；06:00 那一小时是 `humanness:record r3` 的 dry_run 录制，单列）：
 
-| 现象 | 数据 | 根因 |
-| --- | --- | --- |
-| 研究循环撞预算 | 40 次研究里 14 次 `PromptContextBudgetError` | 每轮重建运行时数据包（证据全量）+ 工具输出在 SDK 历史里累积；`EXECUTION_RUN_INPUT_CHARS` 10 万字累计上限 |
-| 兜底路径成了常态 | 23 次收尾里 16 次 `bounded_finalization`，`planned_delivery` 只有 7 次 | 同上：研究没走到 `record_task_progress(deliver)` 就被预算打断 |
-| 每条消息贵且慢 | 中位数 7 次模型调用、5.6 万输入 token、35 s；最长 139 s | 研究循环上下文无隔离 |
-| 三个说话出口 | 33 条出站里 10 条由研究阶段直接写（没进收尾），23 条由收尾写；另有 `respondRequestStatus` 代码状态句 | 研究阶段 `STAGE_MATRIX.research` 带 voice，工具集含 `reply_to_request`/`react`/`reply_in_group` 等（`prompts/tool-contract.ts:10`） |
+| 现象 | 实发（33 条进 agent，31 条研究，27 条出站） | 录制 r3-rec（9 条） | 根因 |
+| --- | --- | --- | --- |
+| 研究循环撞预算 | 31 次研究里 10 次 `PromptContextBudgetError` | 4/9 | 每轮重建运行时数据包（证据全量）+ 工具输出在 SDK 历史里累积；`EXECUTION_RUN_INPUT_CHARS` 10 万字累计上限 |
+| 兜底路径成了常态 | 18 次收尾里 12 次 `bounded_finalization`，`planned_delivery` 6 次 | 4 vs 1 | 同上：研究没走到 `record_task_progress(deliver)` 就被预算打断 |
+| 每条消息贵且慢 | matchAgent 调用中位数 6 次、输入 5.4 万 token；进 agent 到完成中位数 46 s，最长 139 s | 6 次、3.5 万 | 研究循环上下文无隔离 |
+| 三个说话出口 | 27 条出站里 9 条由研究阶段直接写（没进收尾），18 条由收尾写；另有 `respondRequestStatus` 代码状态句 | 1 / 5 | 研究阶段 `STAGE_MATRIX.research` 带 voice，工具集含 `reply_to_request`/`react`/`reply_in_group` 等（`prompts/tool-contract.ts:10`） |
 | 阶段只是开关 | `createMatchAgent` 用 `taskPlanningOnly / requestStatusOnly / finalAnswerOnly / answerRequests / taskRequests` 拼出各阶段；交棒逻辑在 `toolUseBehavior` 里；`run.ts` 768 行多为兜底 | 阶段从未成为一等对象 |
 
 业界（OpenClaw sub-agents、Hermes `delegate_task`、Claude Code subagents、Anthropic 多 agent 研究系统、Cognition 2026-04）一致的做法：干活的子 agent 不带人设、没有对外发言工具、独立上下文、只交回精简结论或证据引用；只有一个角色对人说话。
@@ -37,7 +37,7 @@
 
 ## 任务清单
 
-- [ ] T1 基线：`pnpm humanness export --since … --until …` 导出第七轮实发回复为 `r7`，`metrics` + `judge`；从 decision_traces 统计 r3-rec 与 r7 两轮的研究指标（见验收 1）写进本文件，作为基线表。不花生成 token（判官走 OPENAIROUTER）。
+- [x] T1 基线（2026-10-22，结果见文末"基线"）：`pnpm humanness export --since … --until …` 导出第七轮实发回复为 `r7`，`metrics` + `judge`；从 decision_traces 统计 r3-rec 与 r7 两轮的研究指标（见验收 1）写进本文件，作为基线表。不花生成 token（判官走 OPENAIROUTER）。
 - [ ] T2 测量：在执行阶段 trace 里按轮记录 `packetChars`（运行时数据包）、`historyChars`（SDK 历史）、`toolOutputChars`（本轮工具输出），用 r3 的一个市场案例 `humanness:record --only` 跑一次，确认预算是被哪一块吃掉的。结论回写本文件"改法 5"。
 - [ ] T3 `stages/` 四个工厂，`run.ts`、`task-preparation.ts` 改调；行为不变（这一步所有既有测试应原样通过，`saveExecutionCheckpoint` 的逐步检查点照旧）。单独提交。
 - [ ] T4 研究员：去 voice / delivery 层、去出站工具、新增 `finish_research`（zod 参数、refs 服务端校验、trace）；`toolUseBehavior` 以 `finish_research` 为唯一终点；预算撞线转 `deliver`。
@@ -50,10 +50,10 @@
 ## 验收标准
 
 1. **研究指标**（r3 全部 9 问 + r7 选出的 12 问，与 T1 基线同口径）：
-   - `PromptContextBudgetError` ≤ 1 次（基线 r7 14/40）；
-   - 进入写手的回复中，研究员主动结束（`finish_research` 或 `record_task_progress` 的 deliver / ask_user，不含撞线与超时转交）≥ 80%（基线 `planned_delivery` 7/23）；
-   - 每条进 agent 的消息输入 token 中位数 ≤ 基线 × 0.7（基线 5.6 万）；
-   - 进 agent 到出站的耗时中位数 ≤ 基线 × 1.1（基线 35 s）。
+   - `PromptContextBudgetError` ≤ 1 次（基线实发 10/31、录制 4/9）；
+   - 进入写手的回复中，研究员主动结束（`finish_research` 或 `record_task_progress` 的 deliver / ask_user，不含撞线与超时转交）≥ 80%（基线 `planned_delivery` 实发 6/18）；
+   - 每条进 agent 的消息 matchAgent 输入 token 中位数 ≤ 同批问题基线 × 0.7（录制模式下与录制基线比：r3-rec 3.5 万）；
+   - 进 agent 到完成的耗时中位数不高于同批基线 × 1.1。
 2. **单一出口（结构）**：研究员阶段的工具集里没有任何出站工具（测试断言）；r3-p52 / r7-p52 的每条 outbound 都有一条 `delivery_stage` trace。
 3. **人感不退步**：`replay r3-p52 --n 3` 的 11 项可数指标仍全部达标；判官均分 ≥ 3.7（try6 3.94，回放噪声约 ±0.2）。
 4. **该沉默的沉默**：r7 中 triage 放行但最终没有回复的消息，在 r7-p52 里仍不回复（逐条列出差异并说明）。
@@ -79,3 +79,18 @@ T2 单案例约 4 万 token；T8 两次录制约 21 问 × 4–6 万 ≈ 100 万
 | [P55](./P55-ack-then-research.md) | 阶段 A：直接提问先点 👀；阶段 B：后台研究、查完推回 | 阶段 B 改 AGENTS.md §3.3 第 10 条"每个请求最多一条状态" | A：P52；B：P53 |
 
 顺序：P52 → P53（P55 阶段 A 可与 P53 并行）→ P54、P55 阶段 B。只有 P52 不需要用户拍板；P53–P55 各自列了 D 项，拍板前不开工。
+
+## 基线（T1，2026-10-22）
+
+`r7` = 第七轮实发 07:00–15:00 UTC 的 17 条回复（`pnpm humanness export --since 2026-10-22T07:00:00Z --until 2026-10-22T15:00:00Z --name r7`），判官 gpt-6.1-sol。
+
+| 轮 | 来源 | 长度中位数 | 可数指标达标 | 带卡 | 链接最多 | 判官均分 | 盲判 | 主要扣分 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| p51-try6 | 回放 r3-rec ×3（收尾阶段） | 58.5 | 11/11 | 6/18 | 2 | 3.94 | 1.0，bot 87 | 群里喊一声、复述帖子 |
+| r7 | 实发 | 58 | 5/11 | 8/17 | 4 | 3.41 | 0.971，bot 75 | 套路句式 4、汇报检索 3、没接情绪 2、卡不该出现 2 |
+
+r7 没达标的项：超过 100 字 4 条、£ 2、检索汇报词 1、语气词 6/17、带卡 8、链接最多 4。
+
+读法：实发比回放低半分多。一部分是版本（第七轮跑的是 0.35.0 前后的工作树，P51 收尾的 0.35.1 改动不在里面），一部分是回放只重跑收尾阶段——实发里 9/27 条出站是研究阶段直接写的，回放覆盖不到。这正是本包"单一出口"要消除的差别：之后回放测到的写手就是实发唯一的作者。
+
+研究指标基线见"为什么"一节的表（实发与录制分列）。
