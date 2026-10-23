@@ -13,7 +13,10 @@ import { resolveTaskMarketTarget, bindTaskMarketPlan } from './task-market-plan.
 import { decrypt, encrypt } from '@matchbot/shared';
 import { RunContext, RunState as SdkRunState } from '@openai/agents';
 import { z } from 'zod';
-import { AGENT_VERSION, createMatchAgent } from './agent.js';
+import { createMatchAgent } from './agent.js';
+import { AGENT_VERSION } from './agent-version.js';
+import { createStatusAgent } from './stages/status.js';
+import { createWriterAgent } from './stages/writer.js';
 import type { AgentDeps, MatchContext } from './context.js';
 import { createPgSession } from './session.js';
 import { restoreSearchContext } from './restore-search-context.js';
@@ -343,11 +346,10 @@ async function finalizeRequest(
     p.ctx.sourceFailures ??= [];
     p.ctx.sourceFailures.push('processing:invalid_evidence');
   }
-  const { agent, runner } = createMatchAgent(p.deps, {
+  const { agent, runner } = createWriterAgent(p.deps, {
     context: p.ctx,
     phase: p.ctx.phase,
     input: p.input,
-    finalAnswerOnly: true,
     inputRef: p.ctx.sourceMessageId,
     ...(p.ctx.task ? { taskId: p.ctx.task.id } : {}),
   });
@@ -494,11 +496,10 @@ async function respondRequestStatus(
     await status.invoke(context, '{}');
     return { kind: 'completed', toolsCalled: ['reply_request_status'] };
   }
-  const { agent, runner } = createMatchAgent(p.deps, {
+  const { agent, runner } = createStatusAgent(p.deps, {
     context: p.ctx,
     phase: p.ctx.phase,
     input: p.input,
-    requestStatusOnly: true,
     inputRef: p.ctx.sourceMessageId,
     ...(p.ctx.task ? { taskId: p.ctx.task.id } : {}),
   });

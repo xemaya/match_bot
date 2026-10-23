@@ -39,7 +39,7 @@
 
 - [x] T1 基线（2026-10-22，结果见文末"基线"）：`pnpm humanness export --since … --until …` 导出第七轮实发回复为 `r7`，`metrics` + `judge`；从 decision_traces 统计 r3-rec 与 r7 两轮的研究指标（见验收 1）写进本文件，作为基线表。不花生成 token（判官走 OPENAIROUTER）。
 - [ ] T2 测量：在执行阶段 trace 里按轮记录 `packetChars`（运行时数据包）、`historyChars`（SDK 历史）、`toolOutputChars`（本轮工具输出），用 r3 的一个市场案例 `humanness:record --only` 跑一次，确认预算是被哪一块吃掉的。结论回写本文件"改法 5"。
-- [ ] T3 `stages/` 四个工厂，`run.ts`、`task-preparation.ts` 改调；行为不变（这一步所有既有测试应原样通过，`saveExecutionCheckpoint` 的逐步检查点照旧）。单独提交。
+- [x] T3 `stages/` 四个工厂，`run.ts`、`task-preparation.ts` 改调；行为不变（这一步所有既有测试应原样通过，`saveExecutionCheckpoint` 的逐步检查点照旧）。单独提交。
 - [ ] T4 研究员：去 voice / delivery 层、去出站工具、新增 `finish_research`（zod 参数、refs 服务端校验、trace）；`toolUseBehavior` 以 `finish_research` 为唯一终点；预算撞线转 `deliver`。
 - [ ] T5 写手：按场景挂一个回复工具；证据简报补 xhs 与目录证据（`find_suppliers` 的结果现在不进 ctx，只有 `supplierSearchEmpty`；要新增 `ctx.catalogueSuppliers` 交给写手，`reply_in_group` 仍按库内 id 校验）；研究备忘进数据包；`skip` / `no_answer` / `ask_user` 与不需研究的情况的代码分流。
 - [ ] T6 研究员工作视图与工具输出摘要（按 T2 结论）。

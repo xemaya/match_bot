@@ -1,8 +1,8 @@
 import { runtimeContext } from './prompts/runtime-context.js';
-import { createMatchAgent } from './agent.js';
+import { createPlannerAgent } from './stages/planner.js';
 import type { AgentDeps, MatchContext } from './context.js';
 
-/** Same matchAgent, bounded preparation stage; no searches or outbound tools are registered here. */
+/** Bounded preparation stage (stages/planner.ts); no searches or outbound tools are registered here. */
 export async function prepareTaskTurn(p: {
   deps: AgentDeps;
   ctx: MatchContext;
@@ -69,11 +69,10 @@ export async function prepareTaskTurn(p: {
       });
       return true;
     }
-    const { agent, runner } = createMatchAgent(p.deps, {
+    const { agent, runner } = createPlannerAgent(p.deps, {
       context: p.ctx,
       phase: p.ctx.phase,
       input: p.input,
-      taskPlanningOnly: true,
       taskRefs: p.ctx.taskCandidates.map((task) => task.id),
       inputRef: p.ctx.sourceMessageId,
     });
