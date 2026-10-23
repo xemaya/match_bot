@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  selectMemberNotes,
+  selectPeerOffers,
   BOT_SPEAKER,
   CURRENT_AUTHOR_SUFFIX,
   GROUP_TRANSCRIPT_LIMITS,
@@ -48,5 +50,40 @@ describe('buildGroupTranscript', () => {
     expect(lines.at(-1)!.text.endsWith('…')).toBe(true);
     expect(lines.at(-1)!.text.length).toBe(GROUP_TRANSCRIPT_LIMITS.lineChars + 1);
     expect(lines[0]!.at <= lines.at(-1)!.at).toBe(true);
+  });
+});
+
+describe('P53/P54 group view selection', () => {
+  const line = (memberId: string, text: string) => ({
+    at: '2026-10-22T10:00Z',
+    speaker: memberAlias(memberId),
+    text,
+    memberId,
+  });
+  it('picks public offers that touch the topic, never the asker’s own lines or A2H', () => {
+    const offers = selectPeerOffers(
+      [
+        line('m1', '我有多的羽毛球拍 谁要借'),
+        line('m2', '周末有空的可以一起去看展'),
+        line('asker', '我有多的球拍吗 不记得了'),
+        { at: '', speaker: 'A2H', text: '我有多的羽毛球拍' },
+      ],
+      '周日想打羽毛球 缺个拍子',
+      'asker',
+    );
+    expect(offers).toEqual([{ speaker: memberAlias('m1'), text: '我有多的羽毛球拍 谁要借' }]);
+  });
+  it('puts the asker’s notes first, then related notes of others, within the budget', () => {
+    const notes = selectMemberNotes(
+      [
+        { userId: 'm1', kind: 'offer', text: '月底有间房空出来 在 Mile End' },
+        { userId: 'asker', kind: 'need', text: '在找 Mile End 附近的房' },
+        { userId: 'm2', kind: 'offer', text: '有多的羽毛球拍' },
+      ],
+      'Mile End 找房',
+      'asker',
+    );
+    expect(notes.map((n) => n.memberId)).toEqual(['asker', 'm1']);
+    expect(notes[0]!.member).toContain('（当前发言者）');
   });
 });

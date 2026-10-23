@@ -1,6 +1,6 @@
 # P55 先回一句再查
 
-状态：阶段 A 实现中（2026-10-22 用户以 /goal 授权推进；D1 按推荐先做表情）。负责人 claude。依赖：阶段 A 只依赖 P52（可与 P53 并行）；阶段 B 依赖 P53（主 agent 决定是否研究、新鲜度检查）。范围 阶段 A：`packages/agent`（主 agent 调研究前的表情确认）；阶段 B：`packages/queue`、`apps/worker`（后台研究任务与回推）、`packages/agent`。
+状态：阶段 A 已实现（0.37.0）；阶段 B 按下文条件待定（2026-10-22 用户以 /goal 授权推进；D1 按推荐先做表情）。负责人 claude。依赖：阶段 A 只依赖 P52（可与 P53 并行）；阶段 B 依赖 P53（主 agent 决定是否研究、新鲜度检查）。范围 阶段 A：`packages/agent`（主 agent 调研究前的表情确认）；阶段 B：`packages/queue`、`apps/worker`（后台研究任务与回推）、`packages/agent`。
 
 总体路线见 [P52](./P52-researcher-subagent-single-voice.md#总体路线p52p55)。
 
@@ -70,3 +70,12 @@
 - `ack-reaction.ts`：`runInbound` 一开始（triage 放行之后、planner 之前）对 `addressedToBot` 的群消息点 👀，走与 `react` 相同的出站门（Phase 0 dry_run、Phase 1 起直接发、不送审不调 Jev 不占频控），**不置 `answerRecorded`**；run 以 completed 结束且什么都没发出时撤回。
 - 出站表按"源消息 + 用途"做幂等，原来一条消息只能有一个表情，👀、撤回、收尾的 👍 会互相去重；幂等键对表情改为带上表情本身（`reaction:<text>`）。撤回用 `REACTION_CLEAR` 哨兵，sender 发 `setMessageReaction(chat, msg, [])`。
 - 阶段 B 的"文字确认"不再需要：确认用表情，一个请求仍只有一条文字答复，AGENTS.md §3.3 第 10 条不用改（D2 不触发）。
+
+## 阶段 B 的处理（2026-10-23）
+
+阶段 B 暂不实现，理由与触发条件：
+
+- 阶段 A 已经解决"半分钟没反应"：直接提问在任何模型调用前就有 👀（只等 triage 一次小调用），不需要后台研究也能给出第一个信号。
+- B 剩下的收益是"研究期间提问者补充的条件并进同一次研究、不被 `deferMs` 推迟"。现在这类追问会在上一条处理完后再进来；0.34.0 的 5 分钟冷却与 P53 的新鲜度检查（`newGroupLines`）已经能挡住大部分重复发言。
+- B 的成本：新的 `research_task` / `resume_main` 队列载荷、研究任务不占用户 lease、检查点加密与过期、回推幂等、研究中追加条件的合并——都是出站与并发路径上的改动，风险集中在审批恢复与重复出站。
+- 触发条件：联合实测里统计"研究进行中同一成员又发了与该任务相关的消息"的次数（`request_execution` 的 busy / defer trace 与 task 绑定）。每章出现 ≥3 次，或出现因推迟导致的重复回答，就开阶段 B；否则维持现状。
