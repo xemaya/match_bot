@@ -149,3 +149,7 @@ T2 的"群里时刻"评测落为 `pnpm humanness moves <源轮次> <录制轮次
 - 仍见的问题：那条房源回复里"今晚过夜应该能谈"是写手对帖子之外的推测（门没拦住，属于措辞推断，不是数字或特性）。
 - 演员侧两次演化失败（`evolution_missing_actor_review`、`too_many_simulated_life_events`）用 `--resume-after-fix` 续跑；为此在 actor_bots 的 `scripts/telegram-evolution-live.py` 可续跑名单里加了这两个失败名（未提交）。
 - 实测结束后测试群已切回 Phase 0，进程已停。
+
+## 定向实测：点名（2026-10-23）
+
+阿明（演员账号）先发"搬完家多出一辆自行车 我用不上了 谁要白送 Mile End自取"（triage：peer_offer_noted），25 秒后小林发"有人有闲置自行车吗 想骑去学校 预算不多"。triage 放行（0.37.3 的"之前的对口提供不算已处理"），主 agent 群视图 peerOffers=1，**不做研究直接 `refer_member`**，5 秒后发出："你那辆搬完家多出来的自行车还送吗 这边有人正想骑去学校 预算不多 正好对得上"，mention 为阿明的 bot id。点名在真实 Telegram 上**可用**。
