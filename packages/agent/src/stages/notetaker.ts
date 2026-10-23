@@ -20,10 +20,6 @@ const NOTETAKER_INSTRUCTIONS = [
 
 const NOTE_ID = /^n\d+$/;
 const LINE_ID = /^l\d+$/;
-/** Contact details and exact addresses never go into a note (AGENTS.md §6 / §3.3 rule 11). */
-const PII =
-  /\+?\d[\d\s-]{7,}\d|[\w.+-]+@[\w-]+\.[\w.]+|@\w{3,}|\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b|\d+\s*(?:号|室|flat|Flat)/;
-
 function cjkBigrams(text: string): Set<string> {
   const out = new Set<string>();
   for (const run of text.match(/[一-鿿]+/g) ?? [])
