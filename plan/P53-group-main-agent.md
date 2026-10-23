@@ -1,6 +1,6 @@
 # P53 主 agent「群里的 A2H」
 
-状态：实现完成，回路验收部分达标；联合实测（T9）待用户放行（2026-10-23）。D1–D4 按推荐执行。负责人 claude。依赖：P52（研究员子 agent、单一出口、`stages/` 工厂）。范围 `packages/agent`（新主 agent 阶段、研究员 `asTool`、新发言工具与门）、`packages/domain`（出站 mention 渲染）、`apps/worker/src/pipeline/inbound.ts`（主 agent 接入、写前新鲜度检查）、`packages/eval`（"群里时刻"评测）。
+状态：完成（2026-10-23），回路验收部分达标、联合实测已跑。D1–D4 按推荐执行。负责人 claude。依赖：P52（研究员子 agent、单一出口、`stages/` 工厂）。范围 `packages/agent`（新主 agent 阶段、研究员 `asTool`、新发言工具与门）、`packages/domain`（出站 mention 渲染）、`apps/worker/src/pipeline/inbound.ts`（主 agent 接入、写前新鲜度检查）、`packages/eval`（"群里时刻"评测）。
 
 总体路线见 [P52](./P52-researcher-subagent-single-voice.md#总体路线p52p55)。
 
@@ -62,7 +62,7 @@ P51 之后可数指标 11/11 达标、判官 3.94，但盲判命中率仍 1.0。
 - [x] T6 写前新鲜度检查与 `stale_context` 一轮重决；测试覆盖"他人已答""提问者说搞定了""A2H 已在本线发过"。
 - [x] T7 删掉被主 agent 取代的局部开口规则（第 6 条），trace 保留原因字段。
 - [x] T8 回路：`moments r7`；`humanness:record r3 / r7 --as *-p53`，`metrics` / `judge`（D3 的新评分题）/ `compare`。
-- [ ] T9 联合实测一轮（actor_bots，额度另批）作为最终验收；`docs/技术架构设计.md` §3 / §4 更新；AGENT_VERSION 0.37.0；清空待审 `run_states`；`pnpm eval`；`pnpm build && pnpm check`；完成记录。
+- [x] T9 联合实测一轮（actor_bots，额度另批）作为最终验收；`docs/技术架构设计.md` §3 / §4 更新；AGENT_VERSION 0.37.0；清空待审 `run_states`；`pnpm eval`；`pnpm build && pnpm check`；完成记录。
 
 ## 验收标准
 
@@ -135,3 +135,17 @@ T2 的"群里时刻"评测落为 `pnpm humanness moves <源轮次> <录制轮次
 修正后的录制（r3/r7-p53b、r3/r7-p54、r3-turns、r3-lean）里 A2H 发言 33 次：研究后回答 31、半句 2、点名 0；另有主 agent 主动沉默 8 次。探针里点名 4 次。**按录制统计约 6%，未达 15–40%。**
 
 结构原因：出站表对同一条源消息只允许一条文字回复（`requestKey` 按"源消息 + reply"去重），"先接半句再给答案"在同一条消息上不可能，半句只会在"只该说半句"的消息上出现；录制里的消息绝大多数是明确的求助，判官也认为应答。这条验收的口径（占比）不合适，建议改为"该点名 / 该接半句的场景里是否这样做"——探针口径下点名 4/5。
+
+## 联合实测（T9，2026-10-23，用户放行；run 8 ch11–ch12，0.37.4，Phase 2）
+
+| 章 | tick | 演员消息 | 演员 token | Match Bot token | 进 agent | A2H 发言 | 备注写入 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| ch11（12-12 世界时间） | 19 | 17 | 33 万 | 13 万 | 1 | 1 条房源 | 8 |
+| ch12（12-19） | 20 | 27 | 31 万 | 7.7 万 | 0 | 0 | — |
+
+- 群里时刻判官（44 条群消息，含沉默）：**合适率 1.0、不该说却说 0、该答却沉默 0**。对照第七轮实发：0.765，抢答 4 次。
+- A2H 唯一的发言是在小鱼"有别的 zone2-3 房源记得踢我"之后给出一条房源；随后阿明公开说"我那间还空着"、两人约看房，A2H 没再插话；小林招人打阿瓦隆、两章大量约桌游的对话里 A2H 全程沉默。
+- 两章里没有演员直接 @A2H，也没有"刚有人公开提供、另一人来要"的场景，所以 👀（P55 A3）与点名在实测里**没有被触发**，只有探针数据（点名 4/5、首个信号 2.9–5.3 s）。
+- 仍见的问题：那条房源回复里"今晚过夜应该能谈"是写手对帖子之外的推测（门没拦住，属于措辞推断，不是数字或特性）。
+- 演员侧两次演化失败（`evolution_missing_actor_review`、`too_many_simulated_life_events`）用 `--resume-after-fix` 续跑；为此在 actor_bots 的 `scripts/telegram-evolution-live.py` 可续跑名单里加了这两个失败名（未提交）。
+- 实测结束后测试群已切回 Phase 0，进程已停。
