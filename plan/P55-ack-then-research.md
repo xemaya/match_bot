@@ -84,3 +84,7 @@
 
 - 代码与测试完成：👀 只对 @ A2H 的群消息、在任何模型调用前发出（只等一次 triage）；Phase 0 dry_run、Phase 1/2 直接发；run 以 completed 结束且没发出任何东西时撤回（`REACTION_CLEAR`）；幂等键按表情区分；sender 清除反应有测试。
 - 录制回路无法验证：录制的提问都不是 @ A2H 的消息，且 Phase 0 只记录。`firstSignalMs` 的实测（验收 A1 ≤8 s）与演员反应（A3）依赖联合实测，**待用户放行 Phase 2 后进行**。A2 的单独指标未加进 `humanness metrics`：录制里没有可数的表情事件，留到联合实测从 trace（`ack_reaction` 与入站时间）直接算。
+
+## 阶段 A 实测（2026-10-23，`pnpm humanness:probe --ack`，Phase 0）
+
+三条 @A2H 的直接提问，从进入流水线到 👀 写入出站表：**2.9 s / 5.0 s / 5.3 s**（验收 A1 ≤ 8 s，**达标**）；同一批的文字回答在 38.6 s / 32.8 s / 77.3 s。首个信号从"答复时间"提前到 triage 之后。撤回路径由单元测试覆盖（直接提问最终什么都没发出时，`ack_withdrawn` + `REACTION_CLEAR`），这三条都有回答所以没触发。A3（演员对表情的反应）仍需联合实测。
