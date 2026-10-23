@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AgentDeps } from '../src/context.js';
 import {
   consolidateGroupMemory,
+  correctedKind,
   isMemberCoordination,
   noteIsGrounded,
 } from '../src/stages/notetaker.js';
@@ -24,6 +25,13 @@ describe('P54 notetaker', () => {
     expect(noteIsGrounded('周日下午三点半到Brick Lane等对方', '我三点半到Brick Lane那边等你')).toBe(
       false,
     );
+  });
+  it('files a companion or item ask as a need even when the model says offer', () => {
+    expect(correctedKind('offer', '周日有人想一起看展吗 我正好有空')).toBe('need');
+    expect(correctedKind('offer', '我有两把多的羽毛球拍 谁要借可以找我')).toBe('offer');
+    expect(correctedKind('context', '有没有人知道哪里修车')).toBe('context');
+    // A giveaway phrased as a question is still an offer.
+    expect(correctedKind('offer', '攒了一堆空纸箱 有人搬家用得上吗 E14自取')).toBe('offer');
   });
   it('treats lines addressed to one member as coordination, not notes', () => {
     expect(isMemberCoordination('@小周 周三晚上八点后可以')).toBe(true);

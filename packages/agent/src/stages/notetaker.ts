@@ -38,7 +38,18 @@ function cjkBigrams(text: string): Set<string> {
 export function noteIsGrounded(note: string, source: string): boolean {
   const src = cjkBigrams(source);
   const own = [...cjkBigrams(note)];
-  return own.length > 0 && own.filter((t) => src.has(t)).length / own.length >= 0.5;
+  return own.length > 0 && own.filter((t) => src.has(t)).length / own.length >= 0.6;
+}
+const ASKING = /有人.{0,12}吗|有没有|有谁|谁能|谁有|求(?:推|助|带)?|想找|一起吗|一起去吗|蹲/;
+const OFFERING =
+  /我有|我这有|我可以|找我|借你|送你|可以帮|能帮|空出来|出一|转让|自取|免费|白送|送人|用得上/;
+/**
+ * The kind follows the source line where the wording is unambiguous: a line that asks the group
+ * for something, without offering anything itself, is a need (the audit found companion asks
+ * filed as offers).
+ */
+export function correctedKind(kind: string, source: string): string {
+  return kind === 'offer' && ASKING.test(source) && !OFFERING.test(source) ? 'need' : kind;
 }
 /** A line addressed to one member (@…) is coordination between people, not something to keep. */
 export function isMemberCoordination(text: string): boolean {
@@ -148,7 +159,9 @@ export async function consolidateGroupMemory(
       !line ||
       isMemberCoordination(line.text) ||
       PII.test(text) ||
-      !noteIsGrounded(text, line.text)
+      !noteIsGrounded(text, line.text) ||
+      // A note longer than what was said has added something.
+      text.length > line.text.length + 6
     ) {
       rejected++;
       continue;
@@ -156,7 +169,7 @@ export async function consolidateGroupMemory(
     await deps.repos.memberNotes.add({
       groupId: p.groupId,
       userId: line.message.userId,
-      kind: n.kind,
+      kind: correctedKind(n.kind, line.text) as typeof n.kind,
       text,
       sourceMessageId: line.message.id,
     });
