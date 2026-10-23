@@ -11,7 +11,7 @@ import { TRUST_RULES } from '../prompts/policy/rules.js';
  * cron, never in a reply's hot path. Only group messages; code checks every note against its
  * source line and strips contact details before anything is stored.
  */
-export const NOTETAKER_LIMITS = { lines: 30, notes: 60, noteChars: 120 } as const;
+export const NOTETAKER_LIMITS = { lines: 20, notes: 60, noteChars: 120 } as const;
 
 const NOTETAKER_INSTRUCTIONS = [
   TRUST_RULES,
@@ -106,15 +106,12 @@ export async function consolidateGroupMemory(
     toolUseBehavior: 'stop_on_first_tool',
     modelSettings: {
       toolChoice: 'required',
-      // A reasoning model spends output on thinking before the tool call; 1500 truncated the first
-      // replay pass (2026-10-23), the same failure triage hit at 300.
-      maxTokens: 4000,
-      ...(deps.env.DEEPSEEK_MODEL === 'deepseek-flash'
-        ? { temperature: 0, providerData: { thinking: { type: 'disabled' } } }
-        : {}),
-      ...(deps.env.GENERATION_REASONING_EFFORT
-        ? { reasoning: { effort: deps.env.GENERATION_REASONING_EFFORT } }
-        : {}),
+      // A reasoning model spends output on thinking before the tool call: 1500 and then 4000 both
+      // truncated with no tool call on 30-line passes (2026-10-23). Notes need no deliberation, so
+      // thinking is turned off and a pass reads 20 lines.
+      maxTokens: 8000,
+      temperature: 0,
+      providerData: { thinking: { type: 'disabled' }, enable_thinking: false },
     },
   });
   const runner = new Runner({
