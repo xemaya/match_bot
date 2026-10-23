@@ -592,7 +592,7 @@ export function outboundRepo(prisma: PrismaClient, accountId = '') {
     async recentSentToUser(
       target: string,
       mentionUserId: string,
-      p: { since: Date; limit: number },
+      p: { since: Date; limit: number; before?: Date },
     ): Promise<string[]> {
       const rows = await prisma.outboundMessage.findMany({
         where: {
@@ -600,7 +600,7 @@ export function outboundRepo(prisma: PrismaClient, accountId = '') {
           mentionUserId,
           status: 'sent',
           kind: { not: 'reaction' },
-          sentAt: { gte: p.since },
+          sentAt: { gte: p.since, ...(p.before ? { lt: p.before } : {}) },
         },
         orderBy: { sentAt: 'desc' },
         take: p.limit,

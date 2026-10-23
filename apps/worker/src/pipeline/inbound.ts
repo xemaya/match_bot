@@ -326,13 +326,17 @@ export async function processInbound(
       ...(msg.replyToMessageId ? { replyToMessageId: msg.replyToMessageId } : {}),
       // 2026-10-22 run 7: this was always empty, and A2H recommended the same museum to one member
       // three times across a week. Its own earlier answers to this member, chat line only.
-      recentReplies: (
-        await d.repos.outbound.recentSentToUser(msg.chatId, msg.userId, {
-          since: new Date(Date.now() - RECENT_REPLY_DAYS * 86400e3),
-          limit: 5,
-        })
-      ).map((text) => splitEvidenceCard(text).line.slice(0, 240)),
+      recentReplies:
+        // Bounded by arrival like the group transcript: a replay must not see its own future.
+        (
+          await d.repos.outbound.recentSentToUser(msg.chatId, msg.userId, {
+            since: new Date(stored.receivedAt.getTime() - RECENT_REPLY_DAYS * 86400e3),
+            before: stored.receivedAt,
+            limit: 5,
+          })
+        ).map((text) => splitEvidenceCard(text).line.slice(0, 240)),
       groupTranscript,
+      sourceReceivedAt: stored.receivedAt.toISOString(),
       ...(open ? { demandId: open.id, demand: toDemandDraft(open) } : {}),
     };
     await trace('gate', stored.id, {

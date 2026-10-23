@@ -411,12 +411,14 @@ export function tasksRepo(prisma: PrismaClient) {
       channel: 'telegram' | 'whatsapp';
       chatId: string;
       limit: number;
+      createdBefore?: Date;
     }): Promise<UserTask[]> {
       const p = z
         .object({
           channel: z.enum(['telegram', 'whatsapp']),
           chatId: z.string().min(1),
           limit: z.number().int().min(1).max(20),
+          createdBefore: z.date().optional(),
         })
         .parse(input);
       const rows = await prisma.task.findMany({
@@ -424,6 +426,7 @@ export function tasksRepo(prisma: PrismaClient) {
           channel: p.channel,
           chatId: p.chatId,
           status: { notIn: ['completed', 'cancelled', 'expired'] },
+          ...(p.createdBefore ? { createdAt: { lte: p.createdBefore } } : {}),
         },
         orderBy: { updatedAt: 'desc' },
         take: p.limit,

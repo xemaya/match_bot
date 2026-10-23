@@ -199,17 +199,34 @@ export async function buildGroupView(
   repos: Pick<Repositories, 'tasks' | 'memberNotes'>,
   ctx: Pick<
     MatchContext,
-    'channel' | 'chatId' | 'userId' | 'groupId' | 'groupTranscript' | 'currentRequest' | 'task'
+    | 'channel'
+    | 'chatId'
+    | 'userId'
+    | 'groupId'
+    | 'groupTranscript'
+    | 'currentRequest'
+    | 'task'
+    | 'sourceReceivedAt'
   >,
 ): Promise<GroupView | undefined> {
   if (!ctx.groupId) return undefined;
-  const tasks = await repos.tasks.findOpenInChat({
+  // Threads that existed when the message arrived, plus the one this message is about.
+  const earlier = await repos.tasks.findOpenInChat({
     channel: ctx.channel ?? 'telegram',
     chatId: ctx.chatId,
     limit: GROUP_VIEW_LIMITS.threads,
+    ...(ctx.sourceReceivedAt ? { createdBefore: new Date(ctx.sourceReceivedAt) } : {}),
   });
+  const tasks =
+    ctx.task && !earlier.some((t) => t.id === ctx.task!.id)
+      ? [ctx.task, ...earlier].slice(0, GROUP_VIEW_LIMITS.threads)
+      : earlier;
   const topic = [ctx.currentRequest?.text ?? '', ctx.task?.objective ?? ''].join(' ');
-  const notes = await repos.memberNotes.listForGroup({ groupId: ctx.groupId, limit: 60 });
+  const notes = await repos.memberNotes.listForGroup({
+    groupId: ctx.groupId,
+    limit: 60,
+    ...(ctx.sourceReceivedAt ? { sourceBefore: new Date(ctx.sourceReceivedAt) } : {}),
+  });
   return {
     myOpenThreads: tasks.map((t) => ({
       asker:

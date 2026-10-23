@@ -44,13 +44,20 @@ export function memberNotesRepo(prisma: PrismaClient) {
       return r.count;
     },
     /** Live notes of one group, newest first; optionally only some members. */
-    listForGroup(p: { groupId: string; userIds?: string[]; limit: number }): Promise<MemberNote[]> {
+    listForGroup(p: {
+      groupId: string;
+      userIds?: string[];
+      limit: number;
+      /** Only notes from messages that arrived before this (a replay must not see its future). */
+      sourceBefore?: Date;
+    }): Promise<MemberNote[]> {
       return prisma.memberNote.findMany({
         where: {
           groupId: p.groupId,
           supersededAt: null,
           expiresAt: { gt: new Date() },
           ...(p.userIds ? { userId: { in: p.userIds } } : {}),
+          ...(p.sourceBefore ? { message: { receivedAt: { lt: p.sourceBefore } } } : {}),
         },
         orderBy: { createdAt: 'desc' },
         take: Math.min(Math.max(1, p.limit), 200),

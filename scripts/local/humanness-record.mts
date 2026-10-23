@@ -104,8 +104,15 @@ try {
     }
     // As in p47: tasks the author opened at or after that moment (the task this very message
     // created) are expired so the replay plans the ask afresh instead of continuing them.
+    // 2026-10-23: any open status, not only active — a task a previous recording left waiting
+    // for the user made the planner acknowledge the re-asked printer request and stay silent.
+    // Every member's: the main agent's group view lists open threads across the chat (P53).
     const expired = await prisma.task.updateMany({
-      where: { userId: author.id, status: 'active', createdAt: { gte: original.receivedAt } },
+      where: {
+        chatId: group.externalId,
+        status: { notIn: ['completed', 'cancelled', 'expired'] },
+        createdAt: { gte: original.receivedAt },
+      },
       data: { status: 'expired' },
     });
     const externalId = 'replay-' + original.id + '-' + Date.now();

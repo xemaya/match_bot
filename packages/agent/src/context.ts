@@ -45,6 +45,8 @@ export interface MatchContext {
   requestCategory?: DemandCategory;
   /** Recent public group conversation (aliases only), oldest first; loaded by the pipeline for group messages. */
   groupTranscript?: GroupLine[];
+  /** When the source message arrived; group views are bounded by it so a replay sees no future. */
+  sourceReceivedAt?: string;
   /** P53: what A2H sees of the group besides the conversation (aliases only; built by run.ts). */
   groupView?: GroupView;
   /** P55: A2H put a 👀 on this direct ask; withdrawn if the run sends nothing. */
