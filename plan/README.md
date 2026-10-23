@@ -1,3 +1,4 @@
+P52–P55：Agent 架构路线（2026-10-22 评审）——P52 研究员子 agent 与单一出口（不改契约）→ P53 主 agent「群里的 A2H」→ P54 群记忆 / P55 先回一句再查；P53–P55 有待用户拍板的 D 项，见 [P52](./P52-researcher-subagent-single-voice.md#总体路线p52p55)。 待评审。
 P51：那句话像群里的人——评审排序 1–5 的改法（90 字 2 行、不汇报检索、群聊语域、卡是例外、冷却 id 修复），每项用 `pnpm humanness` 回路出数；见 [P51-chat-line-like-a-member.md](./P51-chat-line-like-a-member.md)。 已完成并合入 main（`2d861b9` 与收尾提交）。
 P50：人感回路——`pnpm humanness` 导出实发回复、算可数指标、路由器判官盲判、解密研究快照只重跑收尾阶段，不进群就能反复试；见 [P50-humanness-loop.md](./P50-humanness-loop.md)。 已完成并合入 main（`1adf509`）。
 P49：证据卡改为例外（去【详情】标题、来源改无标签链接行、details ≤300、群记录只喂那句话），0.33.0；见 [P49-evidence-card-as-exception.md](./P49-evidence-card-as-exception.md)。
@@ -81,6 +82,10 @@ P36：Jev targeted 策略与本地无 Telegram 对话验证，Codex 本地实现
 | P49 | 证据卡改为例外、去标签去来源行 | [P49-evidence-card-as-exception.md](./P49-evidence-card-as-exception.md) | P48 | 9 | claude | 评审中 | 0.33.0：不可见分隔行折叠、无标签链接行、details ≤300、群记录只喂那句话 | 2026-10-21 |
 | P50 | 人感回路：指标、判官、收尾回放 | [P50-humanness-loop.md](./P50-humanness-loop.md) | P49 | 8 | claude | 完成 | main `1adf509`：`pnpm humanness` export/metrics/judge/freeze/replay，replay 记 token | 2026-10-22 |
 | P51 | 那句话像群里的人（排序 1–5） | [P51-chat-line-like-a-member.md](./P51-chat-line-like-a-member.md) | P50 | 7 | claude | 完成 | main `2d861b9` + 收尾：11/11 可数指标、判官 3.94，盲判仍 1.0 | 2026-10-22 |
+| P52 | 研究员子 agent 与单一出口 | [P52-researcher-subagent-single-voice.md](./P52-researcher-subagent-single-voice.md) | P51 | 9 | claude | 待评审 | 研究员无 voice / 无出站、写手唯一作者、stages/ 工厂、预算撞线转交付 | 2026-10-22 |
+| P53 | 主 agent「群里的 A2H」 | [P53-group-main-agent.md](./P53-group-main-agent.md) | P52 | 9 | claude | 待评审（D1–D4 待拍板） | 群视图、研究员 asTool、say_briefly / refer_member、写前新鲜度检查、群里时刻评测 | 2026-10-22 |
+| P54 | 群记忆：成员公开备注 | [P54-group-memory.md](./P54-group-memory.md) | P53 | 7 | claude | 待评审（D1–D3 待拍板） | member_notes 表、后台整理员、30 天到期与删除路径 | 2026-10-22 |
+| P55 | 先回一句再查 | [P55-ack-then-research.md](./P55-ack-then-research.md) | A：P52；B：P53 | 9 | claude | 待评审（D1–D2 待拍板） | A：直接提问先点 👀、无下文撤回；B：后台研究任务与回推 | 2026-10-22 |
 
 ## 波次与并行
 

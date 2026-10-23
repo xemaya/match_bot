@@ -1,0 +1,49 @@
+# P54 群记忆：成员公开备注与后台整理
+
+状态：待评审（2026-10-22 起草）；新增个人数据字段，需用户按 AGENTS.md §6 批准 D1–D3 后开工。负责人 claude。依赖：P53（主 agent 与 `groupView`）。范围 `packages/db`（新表与迁移）、`packages/agent`（整理员 agent、`groupView.memberNotes`）、`packages/queue` 与 `apps/worker`（后台整理任务、保留期 cron）、`packages/eval`。
+
+总体路线见 [P52](./P52-researcher-subagent-single-voice.md#总体路线p52p55)。
+
+## 为什么
+
+P53 的群视图只覆盖最近 6 小时、20 行。群里真正有用的"谁有什么、谁住哪片、谁上周问过什么"往往在更早：第七轮里阿明在群里说过有空房，几天后小鱼找房时 A2H 只会去 A2H 市场搜；A2H 一周内给同一成员推荐同一个博物馆三次（0.35.0 用 `recentReplies` 补了后者，但只限 A2H 对这个人说过的话）。
+
+现状核对（2026-10-22）：triage 的 `peer_offer` 在 `inbound.ts` 里以 `peer_offer_noted` 丢弃，并没有记下来；`supplies` 表 0 行。也就是说，群友公开的供给从来没进过任何记忆。
+
+业界参照：OpenClaw 把长期记忆（MEMORY.md）只放在私聊主 session、群里不加载；Hermes 子 agent 不能写记忆；Letta 由后台 sleep-time agent 整理记忆，对话 agent 不改记忆，因此不增加对话时延。本包取后两条：**记忆只由一个后台整理员写，主 agent 只读**；并且只从**群里公开说过的话**整理，不从私聊整理。
+
+## 设计
+
+1. **新表 `member_notes`**（`MemberNote`）：`id`、`groupId`、`userId`（库内 id）、`kind`（`offer` 供给 / `need` 需求 / `context` 公开的处境，如"在 Mile End 住"/ `resolved` 已解决）、`text`（≤ 120 字，第三人称客观句，别名不入库）、`sourceMessageId`（必须是本群一条公开消息）、`createdAt`、`expiresAt`（= 来源消息 `receivedAt` + 30 天，与 `messages.text` 保留期一致）、`supersededById`。
+2. **整理员（后台，不在热路径）。** 新队列任务 `memory_consolidate`，按群去抖：一个群有新消息后 10 分钟内最多跑一次。输入：该群上次整理之后的公开消息（别名）+ 该群现有未过期备注；输出（结构化工具调用）：新增 / 作废 / 标记已解决。模型用便宜档（`MEMORY_MODEL`，缺省同 `DEEPSEEK_MODEL`），`temperature 0`。代码门：每条备注必须能在来源消息里找到依据（复用 `unsupportedFeature` 式的子串 / 实体核对）；去掉电话、邮箱、门牌号、@handle、精确邮编（只留邮编区，如 E14）。
+3. **读取。** 主 agent 的 `groupView.memberNotes`：当前提问者的备注 + 与当前任务主题相关的其他成员备注（代码按任务关键词 / 类别挑），≤ 8 条、≤ 1200 字，以别名呈现。`refer_member`（P53）的门放宽为"别名出现在 conversation、peerOffers 或 memberNotes 里"。
+4. **peer_offer 不再只是丢弃。** triage 判 `peer_offer` 的消息仍不进 agent，但会触发该群的 `memory_consolidate`。
+5. **保留与删除路径（§6 要求写明）。** `expiresAt` 到期由现有 cron 删除（不是置空，整行删）；来源消息被 30 天 cron 置空时，同步删除引用它的备注；群停用时删除该群全部备注；成员私聊 A2H"忘掉我" / `/forget` 删除其在所有群的备注（D3）。日志与 trace 只记备注 id 与 kind，不记 text（pino redact 加 `note.text`）。
+
+## 需要用户拍板
+
+- **D1 是否引入 `member_notes`。** 这是 AGENTS.md §6 意义上的新增个人数据字段：内容只来自群内公开发言、30 天到期、整行删除。推荐引入。
+- **D2 整理的触发方式。** 推荐按群 10 分钟去抖；备选：每日一次（成本更低，但当天的供给当天用不上）。
+- **D3 成员自助删除。** 推荐提供私聊 `/forget`；备选：只靠 30 天到期。
+
+## 任务清单
+
+- [ ] T1 `schema.prisma` 新增 `MemberNote` 与迁移（`pnpm db:migrate`）；仓储 `memberNotes`（按群 / 成员 / 主题读、写、作废、到期删除）；集成测试。
+- [ ] T2 整理员 agent（`packages/agent/src/stages/notetaker.ts`）：指令、结构化工具、依据核对与 PII 剥离门；stub 模型单测。
+- [ ] T3 `memory_consolidate` 队列任务（`packages/queue` 载荷 schema、幂等 jobId = `memory:<groupId>:<10 分钟桶>`）与 worker 消费；inbound 在进 agent / peer_offer / handled_by_members 之后触发。
+- [ ] T4 `groupView.memberNotes` 选取与预算；`refer_member` 门扩展。
+- [ ] T5 保留期：cron 到期删除、随来源消息置空联删、群停用联删、`/forget`（D3）；pino redact。
+- [ ] T6 评测：用第七轮 8 章的公开消息离线跑整理员（按章顺序回放），抽 40 条备注由判官 + 用户抽查"是否忠于原话、是否含不该留的信息"；在 `moments/r7` 上比较有无 `memberNotes` 的动作一致率与点名正确率。
+- [ ] T7 文档：`docs/隐私说明-群管理员.md` 增加"A2H 记住什么、多久、怎么删"；`docs/技术架构设计.md` §4.4 记忆部分；AGENT_VERSION 递增；`pnpm check`；完成记录。
+
+## 验收标准
+
+1. 备注忠实度：抽查 40 条，≥ 95% 能在来源消息里找到依据；0 条含电话、邮箱、门牌号、@handle 或完整邮编。
+2. 有用：`moments/r7` 上加入 `memberNotes` 后点名正确率不降、动作一致率 ≥ P53 结果；至少能复现一个 6 小时窗口外的正确点名（例如第七轮阿明的空房 → 小鱼的找房）。
+3. 不拖慢对话：主 agent 热路径不新增模型调用；`groupView` 构建新增查询 p95 ≤ 50 ms。
+4. 删除路径全部有测试：到期、来源置空、群停用、`/forget`。
+5. `pnpm check` 全绿（db 基线除外）。
+
+## 额度
+
+整理员按群去抖，第七轮规模（约 350 条群消息 / 8 章）估计 40–60 次调用、每次 3–5k token，合计 ≤ 30 万；T6 离线回放同量级。开跑前报数。
