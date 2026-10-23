@@ -91,10 +91,63 @@ const probes = [
   },
 ];
 
+// P55 A1: direct asks to A2H, timing the 👀 from admission (Phase 0 records it as a dry run).
+const ackProbes = [
+  '@A2H 狗岛附近有没有能安静自习一下午的地方',
+  '@A2H 周末想带娃去个室内的地方 东伦敦有推荐吗',
+  '@A2H 二手书桌30镑以内 Mile End能自取的有吗',
+];
+const onlyAck = process.argv.includes('--ack');
+
 const created: string[] = [];
 let tokens = 0;
 try {
-  for (let round = 0; round < repeat; round++) {
+  for (const text of onlyAck ? ackProbes : []) {
+    const externalId = `probe-ack-${Date.now()}`;
+    const msg = {
+      channel: 'telegram' as const,
+      chatId: GROUP,
+      messageId: externalId,
+      userId: asker!.externalId,
+      text,
+      lang: 'zh',
+      receivedAt: new Date().toISOString(),
+      addressedToBot: true,
+    };
+    const started = Date.now();
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const r = await processInbound(deps, msg);
+      if (!r || !('deferMs' in r)) break;
+      await pause(Math.min(r.deferMs, 5000));
+    }
+    const stored = await repos.messages.findExisting({
+      groupId: group.id,
+      userId: asker!.id,
+      externalId,
+    });
+    if (!stored) continue;
+    created.push(stored.id);
+    const traces = await prisma.decisionTrace.findMany({
+      where: { inputRef: stored.id },
+      orderBy: { createdAt: 'asc' },
+      select: { createdAt: true, output: true },
+    });
+    const at = (gate: string) =>
+      traces.find((t) => (t.output as { gate?: string }).gate === gate)?.createdAt.getTime();
+    const ack = at('ack_reaction');
+    const withdrawn = at('ack_withdrawn');
+    const firstText = (
+      await prisma.outboundMessage.findFirst({
+        where: { sourceMessageId: stored.id, kind: { not: 'reaction' } },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      })
+    )?.createdAt.getTime();
+    out(
+      `ack ${text.slice(5, 25)}: firstSignalMs ${ack ? ack - started : 'none'}, answerMs ${firstText ? firstText - started : 'none'}${withdrawn ? ', withdrawn' : ''}`,
+    );
+  }
+  for (let round = 0; round < (onlyAck ? 0 : repeat); round++) {
     for (const p of probes) {
       const now = Date.now();
       const offer = await repos.messages.create({
