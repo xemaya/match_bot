@@ -110,6 +110,18 @@ function researchBudget(ctx: MatchContext) {
   };
 }
 
+/**
+ * After a tool step: is there no room left for another research turn? The prompt's finishNow was
+ * ignored in most recorded runs (2026-10-23: 6 of 8 still hit the cap), so code ends research here.
+ */
+export function researchBudgetSpent(ctx: MatchContext): boolean {
+  const turns = executionInputTurns.get(ctx) ?? [];
+  const used = executionInputUsed.get(ctx) ?? 0;
+  const last = turns[turns.length - 1];
+  const nextTurn = last ? last.packetChars + last.historyChars : 0;
+  return turns.length >= RESEARCH_TURNS || used + nextTurn * 1.2 > EXECUTION_RUN_INPUT_CHARS;
+}
+
 export function executionInputStats(ctx: MatchContext) {
   const turns = executionInputTurns.get(ctx) ?? [];
   return {

@@ -1,4 +1,4 @@
-# 模型读到的全部文本（AGENT_VERSION 0.37.0）
+# 模型读到的全部文本（AGENT_VERSION 0.37.1）
 
 由 `pnpm prompt:audit` 生成；改了任何提示词后重新生成并一起提交。源文件归属见 `packages/agent/src/prompts/README.md`。
 
@@ -45,36 +45,36 @@
 | catalogue | planning | 4935 | start_task, update_task, clarify_task, acknowledge_task |
 | catalogue | execution | 5233 | record_request, search_information, record_task_progress, read_task_sources, read_web_page, find_suppliers, find_peer_supply, finish_research |
 | catalogue | finalization | 5050 | reply_to_request |
-| catalogue | main | 5380 | research, reply_to_request, say_briefly, refer_member, react, do_nothing |
+| catalogue | main | 5767 | research, reply_to_request, say_briefly, refer_member, react, do_nothing |
 | marketplace | planning | 4935 | start_task, update_task, clarify_task, acknowledge_task |
 | marketplace | execution | 5731 | search_information, record_task_progress, read_task_sources, read_web_page, market_search, market_enrich, finish_research |
 | marketplace | finalization | 5050 | reply_to_request |
-| marketplace | main | 5380 | research, reply_to_request, say_briefly, refer_member, react, do_nothing |
+| marketplace | main | 5767 | research, reply_to_request, say_briefly, refer_member, react, do_nothing |
 | marketplace | planning | 4935 | start_task, update_task, clarify_task, acknowledge_task |
 | marketplace | execution | 5731 | search_information, record_task_progress, read_task_sources, read_web_page, market_search, market_enrich, finish_research |
 | marketplace | finalization | 5050 | reply_to_request |
-| marketplace | main | 5380 | research, reply_to_request, say_briefly, refer_member, react, do_nothing |
+| marketplace | main | 5767 | research, reply_to_request, say_briefly, refer_member, react, do_nothing |
 | marketplace | planning | 4935 | start_task, update_task, clarify_task, acknowledge_task |
 | marketplace | execution | 5731 | search_information, record_task_progress, read_task_sources, read_web_page, market_search, market_enrich, finish_research |
 | marketplace | finalization | 5050 | reply_to_request |
-| marketplace | main | 5380 | research, reply_to_request, say_briefly, refer_member, react, do_nothing |
+| marketplace | main | 5767 | research, reply_to_request, say_briefly, refer_member, react, do_nothing |
 | health_access | planning | 4935 | start_task, update_task, clarify_task, acknowledge_task |
 | health_access | execution | 5409 | search_information, record_task_progress, read_task_sources, read_web_page, finish_research |
 | health_access | finalization | 5050 | reply_to_request |
-| health_access | main | 5380 | research, reply_to_request, say_briefly, refer_member, react, do_nothing |
+| health_access | main | 5767 | research, reply_to_request, say_briefly, refer_member, react, do_nothing |
 | official | planning | 4935 | start_task, update_task, clarify_task, acknowledge_task |
 | official | execution | 5228 | search_information, record_task_progress, read_task_sources, read_web_page, finish_research |
 | official | finalization | 5050 | reply_to_request |
-| official | main | 5380 | research, reply_to_request, say_briefly, refer_member, react, do_nothing |
+| official | main | 5767 | research, reply_to_request, say_briefly, refer_member, react, do_nothing |
 | lifestyle | planning | 4935 | start_task, update_task, clarify_task, acknowledge_task |
 | lifestyle | execution | 5437 | search_information, record_task_progress, read_task_sources, read_web_page, xhs_search, xhs_read_notes, finish_research |
 | lifestyle | finalization | 5050 | reply_to_request |
-| lifestyle | main | 5380 | research, reply_to_request, say_briefly, refer_member, react, do_nothing |
+| lifestyle | main | 5767 | research, reply_to_request, say_briefly, refer_member, react, do_nothing |
 | information | planning | 4935 | start_task, update_task, clarify_task, acknowledge_task |
 | information | execution | 5226 | search_information, record_task_progress, read_task_sources, read_web_page, finish_research |
 | information | finalization | 5050 | reply_to_request |
-| information | main | 5380 | research, reply_to_request, say_briefly, refer_member, react, do_nothing |
+| information | main | 5767 | research, reply_to_request, say_briefly, refer_member, react, do_nothing |
 | unsupported | planning | 4935 | start_task, update_task, clarify_task, acknowledge_task |
 | unsupported | execution | 1791 | finish_research |
 | unsupported | finalization | 4039 | react, do_nothing |
-| unsupported | main | 5310 | research, say_briefly, refer_member, react, do_nothing |
+| unsupported | main | 5697 | research, say_briefly, refer_member, react, do_nothing |

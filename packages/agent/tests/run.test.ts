@@ -1662,7 +1662,8 @@ it.each([false, true])(
 
 it('uses bounded finalization after the research turn budget instead of dropping collected work', async () => {
   const model = new ScriptedModel([
-    ...Array.from({ length: 8 }, (_, i) => [
+    // RESEARCH_TURNS: code ends research after six turns and hands what it has to the writer.
+    ...Array.from({ length: 6 }, (_, i) => [
       // A direct ask cannot be skipped: each refused skip spends a research turn.
       functionCall('finish_research', { outcome: 'skip', note: '' }, { callId: 'noop-' + i }),
     ]),

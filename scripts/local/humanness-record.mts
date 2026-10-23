@@ -67,6 +67,16 @@ const restorePolicies = new Map<
   { isActive: boolean; phase: 0 | 1 | 2; rateLimitPerDay: number }
 >();
 let tokens = 0;
+// A recording that was stopped mid-run leaves its copies running/accepted, and the next recording
+// of the same member then waits on user_busy forever (2026-10-23: 5 of 17 asks never ran).
+const abandoned = await prisma.message.updateMany({
+  where: {
+    executionStatus: { in: ['running', 'accepted'] },
+    createdAt: { lt: new Date(Date.now() - 10 * 60e3) },
+  },
+  data: { executionStatus: 'failed', executionError: 'abandoned_replay' },
+});
+if (abandoned.count) out(`released ${abandoned.count} abandoned executions`);
 try {
   for (const c of source.cases) {
     if (only && c.id !== only) continue;

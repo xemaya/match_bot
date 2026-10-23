@@ -5,6 +5,7 @@ import { canHandOffToDelivery } from '../delivery-context.js';
 import { noGuaranteeOutputGuardrail, sensitiveInputGuardrail } from '../guardrails.js';
 import { researchInstructions } from '../prompts/stages/research.js';
 import { executionToolNames, validateToolContract } from '../prompts/tool-contract.js';
+import { researchBudgetSpent } from '../prompts/runtime-context.js';
 import { finishResearchTool } from '../tools/finish-research.js';
 import { executionTools } from './execution-tools.js';
 import {
@@ -59,6 +60,22 @@ export function createResearcherAgent(deps: AgentDeps, run?: StageRun) {
           r.output.startsWith('ok: research finished'),
       );
       if (finished && 'output' in finished) return final(String(finished.output));
+      if (researchBudgetSpent(ctx)) {
+        // Same standing as the old MaxTurns stop: an honest "could not finish" stays allowed.
+        ctx.sourceFailures ??= [];
+        ctx.sourceFailures.push('processing:ResearchBudgetSpent');
+        ctx.researchOutcome ??=
+          ctx.knowledgeSources?.length || ctx.marketListings?.length ? 'deliver' : 'no_answer';
+        await deps.repos.traces.create({
+          kind: 'gate',
+          inputRef: ctx.sourceMessageId,
+          phase: ctx.phase,
+          latencyMs: 0,
+          costMicro: 0,
+          output: { gate: 'research_budget_stop', outcome: ctx.researchOutcome },
+        });
+        return final('research budget spent; handing over');
+      }
       return finishOnOutbound(ctx, results, outboundToolNames(deps), { stopWhenBlocked: true });
     },
     resetToolChoice: true,

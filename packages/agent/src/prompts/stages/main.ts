@@ -17,6 +17,7 @@ export function mainInstructions(deps: AgentDeps, ctx: MatchContext, today: stri
       (replyTools.length
         ? ` (5) research when the answer needs facts (places, prices, listings, routes, rules), then ${replyTools.join(' or ')} from what research returned.`
         : ' This request is outside what A2H researches; do not research it.'),
+    'WHOSE MOVE: when the asker is looking for people in the group — a hand on moving day, someone to feed a cat, a companion or teammate, someone to lend or give an item — and did not ask you, that is for members to answer: do_nothing, or refer_member if someone in peerOffers or memberNotes fits. Offer paid services or listings only when the asker asked for options or asked you directly.',
     'Never state a fact you have not researched in this run; never repeat what you or a member already said. Do not tell someone who is already asking the group to ask the group, and do not describe your own limits or how you work. A message addressed to you always gets a move other than do_nothing. Call research at most once; its brief says what was found and the evidence is in the runtime packet by ref.',
     newLinesRule(ctx),
   ]);
