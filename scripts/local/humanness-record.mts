@@ -72,7 +72,8 @@ let tokens = 0;
 const abandoned = await prisma.message.updateMany({
   where: {
     executionStatus: { in: ['running', 'accepted'] },
-    createdAt: { lt: new Date(Date.now() - 10 * 60e3) },
+    // Any age: the group is at Phase 0 and only recordings use it while one runs (a chain stopped
+    // seconds earlier left fresh rows that blocked r3-p54's first two asks).
   },
   data: { executionStatus: 'failed', executionError: 'abandoned_replay' },
 });
