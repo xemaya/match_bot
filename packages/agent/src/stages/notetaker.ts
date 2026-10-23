@@ -15,7 +15,7 @@ export const NOTETAKER_LIMITS = { lines: 20, notes: 60, noteChars: 120 } as cons
 
 const NOTETAKER_INSTRUCTIONS = [
   TRUST_RULES,
-  'NOTETAKER: You keep short notes about what members of a London students group said in public, so the group assistant remembers who offered what, who needs what and where people are. Write each note as a short third-person phrase in the member’s language, using only what the source line says. Kinds: offer (something they can give, lend, share or help with), need (something they are looking for), context (a public fact about their situation such as area or move-out date), resolved (an earlier need or offer is done or withdrawn). Keep only what will still matter in a few days: what a member offers to the group, what they are looking for, and their public situation (area, move date, job hunt). Skip chit-chat, thanks, meeting times and arrangements between two people, and anything about other people. Use only words from the note’s own source line; never add a day, place or purpose taken from other lines. Never copy phone numbers, emails, handles, door numbers or full postcodes. Mark existing notes as superseded when a new line replaces or resolves them. Call record_member_notes exactly once; an empty list is fine.',
+  'NOTETAKER: You keep short notes about what members of a London students group said in public, so the group assistant remembers who offered what, who needs what and where people are. Write each note as a short third-person phrase in the member’s language, using only what the source line says. Kinds: offer (something they can give, lend, share or help with), need (something they are looking for), context (a public fact about their situation such as area or move-out date), resolved (an earlier need or offer is done or withdrawn). Keep only what will still matter in a few days: what a member offers to the group, what they are looking for, and their public situation (area, move date, job hunt). Skip chit-chat, thanks, meeting times and arrangements between two people, and anything about other people. For each line worth keeping give its ref and kind; the note stored is the member’s own words from that line, so text may stay empty. Never copy phone numbers, emails, handles, door numbers or full postcodes. Mark existing notes as superseded when a new line replaces or resolves them. Call record_member_notes exactly once; an empty list is fine.',
 ].join('\n');
 
 const NOTE_ID = /^n\d+$/;
@@ -40,16 +40,38 @@ export function noteIsGrounded(note: string, source: string): boolean {
   const own = [...cjkBigrams(note)];
   return own.length > 0 && own.filter((t) => src.has(t)).length / own.length >= 0.6;
 }
-const ASKING = /有人.{0,12}吗|有没有|有谁|谁能|谁有|求(?:推|助|带)?|想找|一起吗|一起去吗|蹲/;
+/** Looking to obtain something: wins over pick-up words such as 自取 in the same line. */
+const BUYING =
+  /谁家(?:还)?有|还有闲置的|有没有.{0,8}要出|要出|求购|想收|收一|收个|淘到|求.{0,4}(?:推|带|租)|帮我/;
 const OFFERING =
-  /我有|我这有|我可以|找我|借你|送你|可以帮|能帮|空出来|出一|转让|自取|免费|白送|送人|用得上/;
+  /我有|我这有|我那|我可以帮|我能帮|帮你|找我|借你|送你|空出来|才空|空着|转让|白送|送人|免费送|拿走|给你留|留给你|有人要吗|谁要|要的话|还在我这|镑出|用得上吗|免费自取|便宜转|转租|想接我|有想.{0,8}的喊我|我来找|我找|一起试试|我带|我这还有|还有多的|多一把|多一个/;
+const ASKING = /想一起的|有人.{0,12}吗|有没有|有谁|谁能|谁有|求|想找|一起吗|一起去吗|蹲|踢我/;
 /**
- * The kind follows the source line where the wording is unambiguous: a line that asks the group
- * for something, without offering anything itself, is a need (the audit found companion asks
- * filed as offers).
+ * The kind follows the line's wording where it is unambiguous — wanting to obtain something, then
+ * offering, then a plain ask; the model's kind only decides the rest. The audits found giveaways,
+ * sales and housing asks filed as context or the wrong way round.
  */
+const RESOLVED = /定好了|搞定了|已经找到|找到了|买到了|不用了|已经约好/;
 export function correctedKind(kind: string, source: string): string {
-  return kind === 'offer' && ASKING.test(source) && !OFFERING.test(source) ? 'need' : kind;
+  // Resolved only when the line says so; the model also marked plans and intentions as resolved.
+  if (RESOLVED.test(source)) return 'resolved';
+  if (BUYING.test(source)) return 'need';
+  if (OFFERING.test(source)) return 'offer';
+  if (ASKING.test(source)) return 'need';
+  // An offer has to say what is offered; a bare intention ("可以先试一次") is context.
+  return kind === 'offer' || kind === 'resolved' ? 'context' : kind;
+}
+/** Contact details and door numbers; dates such as "31号" stay. */
+const SCRUB =
+  /\+?\d[\d\s-]{7,}\d|[\w.+-]+@[\w-]+\.[\w.]+|\b[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}\b|\d+\s*(?:室|flat|Flat)/g;
+/** The stored note: the line itself, without mentions or contact details, at most 120 chars. */
+export function noteExcerpt(text: string): string {
+  return text
+    .replace(/@\S+/g, '')
+    .replace(SCRUB, '…')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, NOTETAKER_LIMITS.noteChars);
 }
 /** A line addressed to one member (@…) is coordination between people, not something to keep. */
 export function isMemberCoordination(text: string): boolean {
@@ -105,7 +127,7 @@ export async function consolidateGroupMemory(
           z.object({
             line: z.string().regex(LINE_ID),
             kind: z.enum(MEMBER_NOTE_KINDS),
-            text: z.string().min(1).max(NOTETAKER_LIMITS.noteChars),
+            text: z.string().max(NOTETAKER_LIMITS.noteChars),
           }),
         )
         .max(20),
@@ -154,15 +176,10 @@ export async function consolidateGroupMemory(
     rejected = 0;
   for (const n of recorded?.add ?? []) {
     const line = lines.find((l) => l.ref === n.line);
-    const text = n.text.trim();
-    if (
-      !line ||
-      isMemberCoordination(line.text) ||
-      PII.test(text) ||
-      !noteIsGrounded(text, line.text) ||
-      // A note longer than what was said has added something.
-      text.length > line.text.length + 6
-    ) {
+    // 2026-10-23 audits: paraphrased notes stayed at ~87% faithful (a day, place or purpose
+    // borrowed from other lines). A note is now the member's own words from that one line.
+    const text = line ? noteExcerpt(line.text) : '';
+    if (!line || isMemberCoordination(line.text) || text.length < 4) {
       rejected++;
       continue;
     }
