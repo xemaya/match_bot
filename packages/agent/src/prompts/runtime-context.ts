@@ -3,6 +3,7 @@ import type { AgentInputItem, CallModelInputFilter, ModelInputData } from '@open
 import type { MatchContext } from '../context.js';
 import { buildMarketChoices } from '../market-choices.js';
 import { marketListingForModel } from '../market-research.js';
+import { selectScene } from './policy/scenes.js';
 
 const MARKER = 'matchbot_runtime_context_v1';
 export type PromptStage = 'planning' | 'execution' | 'finalization' | 'main' | 'status';
@@ -93,6 +94,14 @@ const executionInputTurns = new WeakMap<
 
 /** Research turns before the hand-off is forced; matches the run's maxTurns of 8 minus margin. */
 export const RESEARCH_TURNS = 6;
+/**
+ * Information-type scenes rarely need more than two searches and a read; P52 recordings spent
+ * 5–6 turns there and no fewer tokens than before. Listing scenes keep six for detail reads.
+ */
+export function researchTurns(ctx: MatchContext): number {
+  const scene = selectScene(ctx);
+  return scene === 'marketplace' || scene === 'catalogue' ? RESEARCH_TURNS : 4;
+}
 
 /**
  * P52 (2026-10-23 recording): without a reply to end on, researchers ran until the per-message
@@ -101,7 +110,7 @@ export const RESEARCH_TURNS = 6;
 function researchBudget(ctx: MatchContext) {
   const turn = (executionInputTurns.get(ctx)?.length ?? 0) + 1;
   const usedChars = executionInputUsed.get(ctx) ?? 0;
-  const turnsLeft = Math.max(0, RESEARCH_TURNS - turn);
+  const turnsLeft = Math.max(0, researchTurns(ctx) - turn);
   return {
     turn,
     turnsLeft,
@@ -119,7 +128,7 @@ export function researchBudgetSpent(ctx: MatchContext): boolean {
   const used = executionInputUsed.get(ctx) ?? 0;
   const last = turns[turns.length - 1];
   const nextTurn = last ? last.packetChars + last.historyChars : 0;
-  return turns.length >= RESEARCH_TURNS || used + nextTurn * 1.2 > EXECUTION_RUN_INPUT_CHARS;
+  return turns.length >= researchTurns(ctx) || used + nextTurn * 1.2 > EXECUTION_RUN_INPUT_CHARS;
 }
 
 export function executionInputStats(ctx: MatchContext) {

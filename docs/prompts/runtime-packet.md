@@ -60,7 +60,7 @@
   "research": {
     "budget": {
       "turn": 1,
-      "turnsLeft": 5,
+      "turnsLeft": 3,
       "inputCharsLeft": 100000,
       "finishNow": false
     },

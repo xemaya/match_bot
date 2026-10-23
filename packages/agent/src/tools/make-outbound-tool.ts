@@ -12,6 +12,12 @@ import {
 } from './outbound-gate.js';
 import { OUTBOUND } from '../prompts/tools/outbound.js';
 
+/** First-person offers to take part or help physically, which an assistant account cannot keep. */
+const PRESENCE =
+  /我也(?:想)?(?:去|来|凑|参加|一起)|算我一个|带上我|我(?:可以|能)(?:陪|帮你?(?:搬|拿|带|接|喂|看))|我(?:来|去)(?:接|帮)你|到时候我(?:也)?(?:去|来)/;
+export function claimsPersonalPresence(text: string): boolean {
+  return PRESENCE.test(text);
+}
 export type DraftResult =
   OutboundDraftInput | { error: string; kind?: 'research_required' | 'no_new_help' };
 
@@ -52,6 +58,10 @@ export function makeOutboundTool<A>(
     try {
       const draft = await cfg.toDraft(ctx, args);
       if ('error' in draft) return draft;
+      // 2026-10-23 replay: A2H ended a route answer with "有人一起去的话我也想凑一脚". Sounding like
+      // a member must never mean pretending to be one who can show up.
+      if (draft.kind !== 'reaction' && claimsPersonalPresence(draft.text))
+        return { error: OUTBOUND.feedback.claimsPresence };
       taskDeliveryForOutbound(ctx, draft);
       return draft;
     } catch (error) {

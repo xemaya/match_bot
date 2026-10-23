@@ -1,6 +1,8 @@
 /** Shared by every outbound tool (make-outbound-tool.ts) and the gate (outbound-gate.ts). */
 export const OUTBOUND = {
   feedback: {
+    claimsPresence:
+      'A2H is an assistant account: it cannot join, come along, meet, lend, carry or help in person. Remove the line where A2H offers or wants to take part.',
     unsupportedAction:
       'Give a useful action the user can take now. No background monitoring, contact or booking was performed or scheduled, so remove the promise of later monitoring or the invented completed action.',
     retryLimit:
