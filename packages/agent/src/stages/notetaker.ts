@@ -15,7 +15,7 @@ export const NOTETAKER_LIMITS = { lines: 20, notes: 60, noteChars: 120 } as cons
 
 const NOTETAKER_INSTRUCTIONS = [
   TRUST_RULES,
-  'NOTETAKER: You keep short notes about what members of a London students group said in public, so the group assistant remembers who offered what, who needs what and where people are. Write each note as a short third-person phrase in the member’s language, using only what the source line says. Kinds: offer (something they can give, lend, share or help with), need (something they are looking for), context (a public fact about their situation such as area or move-out date), resolved (an earlier need or offer is done or withdrawn). Skip chit-chat, jokes, greetings and anything about other people. Never copy phone numbers, emails, handles, door numbers or full postcodes. Mark existing notes as superseded when a new line replaces or resolves them. Call record_member_notes exactly once; an empty list is fine.',
+  'NOTETAKER: You keep short notes about what members of a London students group said in public, so the group assistant remembers who offered what, who needs what and where people are. Write each note as a short third-person phrase in the member’s language, using only what the source line says. Kinds: offer (something they can give, lend, share or help with), need (something they are looking for), context (a public fact about their situation such as area or move-out date), resolved (an earlier need or offer is done or withdrawn). Keep only what will still matter in a few days: what a member offers to the group, what they are looking for, and their public situation (area, move date, job hunt). Skip chit-chat, thanks, meeting times and arrangements between two people, and anything about other people. Use only words from the note’s own source line; never add a day, place or purpose taken from other lines. Never copy phone numbers, emails, handles, door numbers or full postcodes. Mark existing notes as superseded when a new line replaces or resolves them. Call record_member_notes exactly once; an empty list is fine.',
 ].join('\n');
 
 const NOTE_ID = /^n\d+$/;
@@ -31,10 +31,18 @@ function cjkBigrams(text: string): Set<string> {
   for (const w of text.toLowerCase().match(/[a-z]{3,}/g) ?? []) out.add(w);
   return out;
 }
-/** A note must share words with its source line; a note with no overlap was not "said". */
+/**
+ * Most of a note's words must come from its own source line. One shared word was not enough: the
+ * 2026-10-23 audit found 11 of 40 notes adding a day, a place or a purpose from other lines.
+ */
 export function noteIsGrounded(note: string, source: string): boolean {
   const src = cjkBigrams(source);
-  return [...cjkBigrams(note)].some((t) => src.has(t));
+  const own = [...cjkBigrams(note)];
+  return own.length > 0 && own.filter((t) => src.has(t)).length / own.length >= 0.5;
+}
+/** A line addressed to one member (@…) is coordination between people, not something to keep. */
+export function isMemberCoordination(text: string): boolean {
+  return /^\s*@/.test(text);
 }
 
 export async function consolidateGroupMemory(
@@ -126,7 +134,7 @@ export async function consolidateGroupMemory(
   const input = JSON.stringify({
     kind: 'matchbot_notetaker_input',
     lines: lines
-      .filter((l) => l.speaker !== BOT_SPEAKER)
+      .filter((l) => l.speaker !== BOT_SPEAKER && !isMemberCoordination(l.text))
       .map(({ ref, speaker, text }) => ({ ref, speaker, text })),
     existingNotes: notes.map(({ ref, member, kind, text }) => ({ ref, member, kind, text })),
   });
@@ -136,7 +144,12 @@ export async function consolidateGroupMemory(
   for (const n of recorded?.add ?? []) {
     const line = lines.find((l) => l.ref === n.line);
     const text = n.text.trim();
-    if (!line || PII.test(text) || !noteIsGrounded(text, line.text)) {
+    if (
+      !line ||
+      isMemberCoordination(line.text) ||
+      PII.test(text) ||
+      !noteIsGrounded(text, line.text)
+    ) {
       rejected++;
       continue;
     }

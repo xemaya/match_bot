@@ -1,7 +1,11 @@
 import { functionCall, ScriptedModel } from '@openai/agents/testing';
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentDeps } from '../src/context.js';
-import { consolidateGroupMemory, noteIsGrounded } from '../src/stages/notetaker.js';
+import {
+  consolidateGroupMemory,
+  isMemberCoordination,
+  noteIsGrounded,
+} from '../src/stages/notetaker.js';
 
 const msg = (id: string, userId: string, text: string) => ({
   id,
@@ -16,6 +20,14 @@ describe('P54 notetaker', () => {
     expect(noteIsGrounded('有多的羽毛球拍', '我有多的羽毛球拍 谁要')).toBe(true);
     expect(noteIsGrounded('住在 Mile End', '我在 mile end 这边')).toBe(true);
     expect(noteIsGrounded('会修自行车', '我有多的羽毛球拍')).toBe(false);
+    // A day or purpose borrowed from other lines is not grounded in this one.
+    expect(noteIsGrounded('周日下午三点半到Brick Lane等对方', '我三点半到Brick Lane那边等你')).toBe(
+      false,
+    );
+  });
+  it('treats lines addressed to one member as coordination, not notes', () => {
+    expect(isMemberCoordination('@小周 周三晚上八点后可以')).toBe(true);
+    expect(isMemberCoordination('我有多的羽毛球拍 谁要借')).toBe(false);
   });
   it('stores grounded notes, rejects invented or contact-detail notes, and supersedes', async () => {
     const model = new ScriptedModel([
