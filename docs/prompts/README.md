@@ -1,4 +1,4 @@
-# 模型读到的全部文本（AGENT_VERSION 0.37.2）
+# 模型读到的全部文本（AGENT_VERSION 0.37.3）
 
 由 `pnpm prompt:audit` 生成；改了任何提示词后重新生成并一起提交。源文件归属见 `packages/agent/src/prompts/README.md`。
 

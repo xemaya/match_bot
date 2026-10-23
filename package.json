@@ -21,6 +21,7 @@
     "humanness": "pnpm --filter @matchbot/eval exec tsx src/humanness/cli.ts",
     "humanness:record": "node --import tsx scripts/local/humanness-record.mts",
     "notes:replay": "node --import tsx scripts/local/notes-replay.mts",
+    "humanness:probe": "node --import tsx scripts/local/humanness-probe.mts",
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test",
     "dev:bot": "pnpm --filter @matchbot/bot dev",
     "dev:worker": "pnpm --filter @matchbot/worker dev",
