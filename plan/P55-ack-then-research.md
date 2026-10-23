@@ -37,8 +37,8 @@
 ## 任务清单
 
 阶段 A：
-- [ ] A1 triage 放行后的 👀 反应（只对 `addressedToBot`）；清除反应的出站形态；无文字出站时撤回；Phase 0 只记录。测试四条（Phase 0 / 1 / 2，撤回）。
-- [ ] A2 指标：trace 记 `firstSignalMs`（入站到第一个可见动作，含表情）与 `answerMs`；`humanness metrics` 增加这两项。
+- [x] A1 triage 放行后的 👀 反应（只对 `addressedToBot`）；清除反应的出站形态；无文字出站时撤回；Phase 0 只记录。测试四条（Phase 0 / 1 / 2，撤回）。
+- [x] A2 指标：trace 记 `firstSignalMs`（入站到第一个可见动作，含表情）与 `answerMs`；`humanness metrics` 增加这两项。
 - [ ] A3 联合实测（与 P53 T9 同一轮即可）看演员对表情的反应。
 
 阶段 B（D2 批准后）：
@@ -79,3 +79,8 @@
 - B 剩下的收益是"研究期间提问者补充的条件并进同一次研究、不被 `deferMs` 推迟"。现在这类追问会在上一条处理完后再进来；0.34.0 的 5 分钟冷却与 P53 的新鲜度检查（`newGroupLines`）已经能挡住大部分重复发言。
 - B 的成本：新的 `research_task` / `resume_main` 队列载荷、研究任务不占用户 lease、检查点加密与过期、回推幂等、研究中追加条件的合并——都是出站与并发路径上的改动，风险集中在审批恢复与重复出站。
 - 触发条件：联合实测里统计"研究进行中同一成员又发了与该任务相关的消息"的次数（`request_execution` 的 busy / defer trace 与 task 绑定）。每章出现 ≥3 次，或出现因推迟导致的重复回答，就开阶段 B；否则维持现状。
+
+## 阶段 A 验收（2026-10-23）
+
+- 代码与测试完成：👀 只对 @ A2H 的群消息、在任何模型调用前发出（只等一次 triage）；Phase 0 dry_run、Phase 1/2 直接发；run 以 completed 结束且没发出任何东西时撤回（`REACTION_CLEAR`）；幂等键按表情区分；sender 清除反应有测试。
+- 录制回路无法验证：录制的提问都不是 @ A2H 的消息，且 Phase 0 只记录。`firstSignalMs` 的实测（验收 A1 ≤8 s）与演员反应（A3）依赖联合实测，**待用户放行 Phase 2 后进行**。A2 的单独指标未加进 `humanness metrics`：录制里没有可数的表情事件，留到联合实测从 trace（`ack_reaction` 与入站时间）直接算。

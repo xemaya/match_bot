@@ -2065,15 +2065,15 @@ describe('P53 main agent in the group', () => {
     const { deps, repos } = groupDeps(model);
     await runInbound({
       deps: { ...deps, modelProvider: { getModel: () => flaky } } as never,
-      ctx: { ...groupCtx(true), runDeadlineAt: Date.now() + 200000 } as never,
+      ctx: groupCtx(true),
       input: '有人知道这附近哪里修车吗',
     });
     expect(repos.outbound.create).toHaveBeenCalledOnce();
-    expect(repos.traces.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        output: expect.objectContaining({ gate: 'main_agent', decision: 'failed', attempt: 0 }),
-      }),
-    );
+    const failures = repos.traces.create.mock.calls
+      .map((c) => JSON.stringify(c))
+      .filter((c) => c.includes('"gate":"main_agent"') && c.includes('"decision":"failed"'));
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toContain('"attempt":0');
     model.assertComplete();
   });
   it('shows lines that arrived while working before the next move', async () => {

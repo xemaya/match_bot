@@ -1,6 +1,6 @@
 # P53 主 agent「群里的 A2H」
 
-状态：实现中（2026-10-22 用户以 /goal 授权推进 P52–P55、生成额度 1000 万；D1–D4 按推荐执行）。负责人 claude。依赖：P52（研究员子 agent、单一出口、`stages/` 工厂）。范围 `packages/agent`（新主 agent 阶段、研究员 `asTool`、新发言工具与门）、`packages/domain`（出站 mention 渲染）、`apps/worker/src/pipeline/inbound.ts`（主 agent 接入、写前新鲜度检查）、`packages/eval`（"群里时刻"评测）。
+状态：实现完成，回路验收部分达标；联合实测（T9）待用户放行（2026-10-23）。D1–D4 按推荐执行。负责人 claude。依赖：P52（研究员子 agent、单一出口、`stages/` 工厂）。范围 `packages/agent`（新主 agent 阶段、研究员 `asTool`、新发言工具与门）、`packages/domain`（出站 mention 渲染）、`apps/worker/src/pipeline/inbound.ts`（主 agent 接入、写前新鲜度检查）、`packages/eval`（"群里时刻"评测）。
 
 总体路线见 [P52](./P52-researcher-subagent-single-voice.md#总体路线p52p55)。
 
@@ -54,14 +54,14 @@ P51 之后可数指标 11/11 达标、判官 3.94，但盲判命中率仍 1.0。
 
 ## 任务清单
 
-- [ ] T1 PoC（`scripts/poc/agent-as-tool.mts`）：0.18.0 的 `asTool` 嵌套 run 的 context 共享、signal、maxTurns、输入过滤器、trace；结论登记进本文件与 `docs/技术架构设计.md` §11。
-- [ ] T2 "群里时刻"评测集：从第七轮导出 `moments/r7`——42 条进 agent 的消息 + 40 条 triage `handled_by_members` 抽样 + 15 条 `peer_offer_noted`，每条带当时的群视图；标签 = 理想动作（沉默 / 表情 / 接半句 / 点名 / 回答）。判官按评分细则先标，用户抽查 20 条定稿。新增 `pnpm humanness moments` 子命令：只跑主 agent 的第一步决定（调 `research` 记为"回答"一类，不真的研究），算动作一致率；第一步就直接回答的才需要证据，用当时冻结的证据简报。
-- [ ] T3 `groupView` 数据（`myOpenThreads`、`myRecentLines`、`peerOffers`）与仓储查询；单测。
-- [ ] T4 主 agent 阶段：`stages/main.ts`，研究员 `asTool`（或 T1 的退路），P52 写手并入；`run.ts` 群聊路径改走主 agent。
-- [ ] T5 `say_briefly`、`refer_member`（门、频控项、mention 渲染）、`stay_silent`；四条出站用例（Phase 0 / 1 / 2 自动 / 2 送审）各一套。
-- [ ] T6 写前新鲜度检查与 `stale_context` 一轮重决；测试覆盖"他人已答""提问者说搞定了""A2H 已在本线发过"。
-- [ ] T7 删掉被主 agent 取代的局部开口规则（第 6 条），trace 保留原因字段。
-- [ ] T8 回路：`moments r7`；`humanness:record r3 / r7 --as *-p53`，`metrics` / `judge`（D3 的新评分题）/ `compare`。
+- [x] T1 PoC（`scripts/poc/agent-as-tool.mts`）：0.18.0 的 `asTool` 嵌套 run 的 context 共享、signal、maxTurns、输入过滤器、trace；结论登记进本文件与 `docs/技术架构设计.md` §11。
+- [x] T2 "群里时刻"评测集：从第七轮导出 `moments/r7`——42 条进 agent 的消息 + 40 条 triage `handled_by_members` 抽样 + 15 条 `peer_offer_noted`，每条带当时的群视图；标签 = 理想动作（沉默 / 表情 / 接半句 / 点名 / 回答）。判官按评分细则先标，用户抽查 20 条定稿。新增 `pnpm humanness moments` 子命令：只跑主 agent 的第一步决定（调 `research` 记为"回答"一类，不真的研究），算动作一致率；第一步就直接回答的才需要证据，用当时冻结的证据简报。
+- [x] T3 `groupView` 数据（`myOpenThreads`、`myRecentLines`、`peerOffers`）与仓储查询；单测。
+- [x] T4 主 agent 阶段：`stages/main.ts`，研究员 `asTool`（或 T1 的退路），P52 写手并入；`run.ts` 群聊路径改走主 agent。
+- [x] T5 `say_briefly`、`refer_member`（门、频控项、mention 渲染）、`stay_silent`；四条出站用例（Phase 0 / 1 / 2 自动 / 2 送审）各一套。
+- [x] T6 写前新鲜度检查与 `stale_context` 一轮重决；测试覆盖"他人已答""提问者说搞定了""A2H 已在本线发过"。
+- [x] T7 删掉被主 agent 取代的局部开口规则（第 6 条），trace 保留原因字段。
+- [x] T8 回路：`moments r7`；`humanness:record r3 / r7 --as *-p53`，`metrics` / `judge`（D3 的新评分题）/ `compare`。
 - [ ] T9 联合实测一轮（actor_bots，额度另批）作为最终验收；`docs/技术架构设计.md` §3 / §4 更新；AGENT_VERSION 0.37.0；清空待审 `run_states`；`pnpm eval`；`pnpm build && pnpm check`；完成记录。
 
 ## 验收标准
@@ -94,3 +94,29 @@ T2 判官标注走 OPENAIROUTER。T8 录制约 100 万生成 token；T9 联合�
 - 主 agent 只在群聊、`answerRequests`、`GROUP_MAIN_AGENT=true`（默认）时启用；私聊与 `ambiguous` 仍走 P52 流程（D4）。审批恢复按快照里的 `isMainAgentRun` 重建主 agent。
 
 T2 的"群里时刻"评测落为 `pnpm humanness moves <源轮次> <录制轮次>`：判官看每一问之前 30 分钟的群友发言、这一问和 A2H 实际的动作（沉默 / 表情 / 半句 / 回答），给出理想动作与是否合适，统计合适率、"不该说却说"、"该答却沉默"。triage 丢弃的消息到不了主 agent，所以评测对象是进入流水线的问题。
+
+## 回路结果（2026-10-23，录制均为修正录制污染后的干净重录）
+
+| 轮 | 版本 | 动作合适率 | 不该说却说 | 该答却沉默 | 判官 | 可数指标 | 研究撞预算 | 耗时中位数 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| r7 实发 | 0.35.0 | 0.765 | 4 | 0 | 3.41 | 5/11 | 10/31 | 46 s |
+| r3-p52c / r7-p52c | 0.37.0 关主 agent | 0.667 / 0.765 | 1 / 0 | 2 / 4 | 3.25 / 4.38 | 10/11 / 10/11 | 3/12 | 56 s |
+| r3-p53 / r7-p53 | 0.37.0 主 agent 第一版 | 0.667 / 0.529* | 1 / 1 | 2 / 6* | 3.5 / 4.0 | — | 6/8 | 63 s |
+| r3-p53b / r7-p53b | 0.37.1 + "谁的事"规则、代码预算截停 | **0.889** / 0.765 | **0 / 0** | 1 / 4 | 3.5 / 4.11 | — / 9/11 | **0/12** | **41 s** |
+
+\* r7-p53 有 5 问被前一次中断录制留下的执行租约挡成 user_busy，不是主 agent 的沉默。
+
+读法：
+- 第一版主 agent 把"找人搭把手 / 帮忙喂猫 / 征集同行"仍当检索题抢答（搬家公司报价），加上"谁的事"规则后这些都改为沉默，r3 的动作合适率 0.667 → 0.889，两轮"不该说却说"都为 0。
+- "该答却沉默"剩下的几乎都来自 triage（录制把追问单独重放，缺 A2H 之前那条回答作上下文，被判无新条件）或冷却，主 agent 自己选择沉默的只有约伴类消息。
+- 研究在主 agent 的 `research` 工具里撞预算 6/8，促成了 0.37.1 的代码侧截停（`researchBudgetSpent`）：之后 0/12，耗时中位数 41 s，低于实发 46 s 与 P52 的 56 s。
+- 主 agent 首次调用的提供方错误（0 输入 token）丢过一问，0.37.1 起对"什么都没发生"的失败重试一次。
+
+**验收对照。**
+1. 群里时刻：合适率 r3 0.889 / r7 0.765（目标 ≥75%，**达标**）；不该说却说 0（目标 ≤10%，**达标**）；该答却沉默 r7 4/17（目标 ≤10%，**未达**，主要是 triage 与录制方式，见上）。
+2. 新发言方式：p53b 动作 = 研究后回答 11、沉默 5、半句 1、点名 0、表情 0；非检索发言占 A2H 发言 1/12（目标 15–40%，**未达**）。点名为 0：录制里的提问没有遇到群视图中对口的群友公开供给。
+3. 人感：判官 r7 4.11（目标 ≥4.0，**达标**），r3 3.5；"让正在约人的人去群里喊"类问题在 p53b 判官理由里未再出现。
+4. 成本与时延：输入 token 中位数 5.9 万（P52 5.6 万 × 1.2 以内，**达标**）；耗时 41 s（**达标**）。
+5. 安全：出站仍只经出站工具与门；`refer_member` 渲染不把渠道 id 写进模型输入（测试断言）；`pnpm check` 1284 通过（3 个 db 基线失败）。
+
+**未做：T9 联合实测。** 把测试群切到 Phase 2 被本机权限策略拦下（视为生产发布），需用户放行后执行 `run8/launch-ch.sh 11` 与 `run8/run-chapter.py 11`（会话 scratchpad），每章 actor ≤40 万、Match Bot ≤90 万 token。

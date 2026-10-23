@@ -1,6 +1,6 @@
 # P54 群记忆：成员公开备注与后台整理
 
-状态：实现中（2026-10-22 用户以 /goal 授权推进 P52–P55；D1–D3 按推荐执行）。负责人 claude。依赖：P53（主 agent 与 `groupView`）。范围 `packages/db`（新表与迁移）、`packages/agent`（整理员 agent、`groupView.memberNotes`）、`packages/queue` 与 `apps/worker`（后台整理任务、保留期 cron）、`packages/eval`。
+状态：实现完成，验收部分达标（2026-10-23）。D1–D3 按推荐执行。负责人 claude。依赖：P53（主 agent 与 `groupView`）。范围 `packages/db`（新表与迁移）、`packages/agent`（整理员 agent、`groupView.memberNotes`）、`packages/queue` 与 `apps/worker`（后台整理任务、保留期 cron）、`packages/eval`。
 
 总体路线见 [P52](./P52-researcher-subagent-single-voice.md#总体路线p52p55)。
 
@@ -28,13 +28,13 @@ P53 的群视图只覆盖最近 6 小时、20 行。群里真正有用的"谁有
 
 ## 任务清单
 
-- [ ] T1 `schema.prisma` 新增 `MemberNote` 与迁移（`pnpm db:migrate`）；仓储 `memberNotes`（按群 / 成员 / 主题读、写、作废、到期删除）；集成测试。
-- [ ] T2 整理员 agent（`packages/agent/src/stages/notetaker.ts`）：指令、结构化工具、依据核对与 PII 剥离门；stub 模型单测。
-- [ ] T3 `memory_consolidate` 队列任务（`packages/queue` 载荷 schema、幂等 jobId = `memory:<groupId>:<10 分钟桶>`）与 worker 消费；inbound 在进 agent / peer_offer / handled_by_members 之后触发。
-- [ ] T4 `groupView.memberNotes` 选取与预算；`refer_member` 门扩展。
-- [ ] T5 保留期：cron 到期删除、随来源消息置空联删、群停用联删、`/forget`（D3）；pino redact。
-- [ ] T6 评测：用第七轮 8 章的公开消息离线跑整理员（按章顺序回放），抽 40 条备注由判官 + 用户抽查"是否忠于原话、是否含不该留的信息"；在 `moments/r7` 上比较有无 `memberNotes` 的动作一致率与点名正确率。
-- [ ] T7 文档：`docs/隐私说明-群管理员.md` 增加"A2H 记住什么、多久、怎么删"；`docs/技术架构设计.md` §4.4 记忆部分；AGENT_VERSION 递增；`pnpm check`；完成记录。
+- [x] T1 `schema.prisma` 新增 `MemberNote` 与迁移（`pnpm db:migrate`）；仓储 `memberNotes`（按群 / 成员 / 主题读、写、作废、到期删除）；集成测试。
+- [x] T2 整理员 agent（`packages/agent/src/stages/notetaker.ts`）：指令、结构化工具、依据核对与 PII 剥离门；stub 模型单测。
+- [x] T3 `memory_consolidate` 队列任务（`packages/queue` 载荷 schema、幂等 jobId = `memory:<groupId>:<10 分钟桶>`）与 worker 消费；inbound 在进 agent / peer_offer / handled_by_members 之后触发。
+- [x] T4 `groupView.memberNotes` 选取与预算；`refer_member` 门扩展。
+- [x] T5 保留期：cron 到期删除、随来源消息置空联删、群停用联删、`/forget`（D3）；pino redact。
+- [x] T6 评测：用第七轮 8 章的公开消息离线跑整理员（按章顺序回放），抽 40 条备注由判官 + 用户抽查"是否忠于原话、是否含不该留的信息"；在 `moments/r7` 上比较有无 `memberNotes` 的动作一致率与点名正确率。
+- [x] T7 文档：`docs/隐私说明-群管理员.md` 增加"A2H 记住什么、多久、怎么删"；`docs/技术架构设计.md` §4.4 记忆部分；AGENT_VERSION 递增；`pnpm check`；完成记录。
 
 ## 验收标准
 
@@ -55,3 +55,17 @@ P53 的群视图只覆盖最近 6 小时、20 行。群里真正有用的"谁有
 - 整理员 `stages/notetaker.ts`：只给模型别名与行号；代码门——来源行必须是同一成员在本群的公开消息（仓储层再校验一次）、备注与来源行必须有词重叠、命中电话 / 邮箱 / @handle / 完整邮编 / 门牌号即丢弃。trace 只记条数，不记备注文字。
 - 删除路径：`delete_member_notes` cron（到期、来源消息已被 30 天 cron 置空）；`groups.setPolicy(isActive=false)` 联删；私聊 `/forget`（在代码门之前处理，删除该成员在所有群的备注，只写 trace，不回消息——发确认需要新的出站形态，留作后续）。
 - 主 agent 的 `groupView.memberNotes`：提问者自己的备注优先，再取与当前话题有词重叠的其他成员备注，≤8 条、≤1200 字，数据包里只有别名；`refer_member` 可以点名只在备注里出现的成员。
+
+## 验收结果（2026-10-23）
+
+- **整理员离线回放**（`pnpm notes:replay`，第七轮 2026-10-22 00:00–15:00 的群消息）：
+  - 第一版：19 批、新增 231 条、作废 91、代码门拒 22。判官抽查 40 条：忠实 29、可保留 31。问题是从相邻行借来时间 / 地点 / 用途，以及记下两人之间的约定。
+  - 收紧后（0.37.2：@某人的协调行不进整理员、备注词至少一半来自原句、只记供给 / 需求 / 公开处境）：新增 59 条、作废 29、拒 18。抽查 40 条：**忠实 32（80%）、可保留 37（92.5%）**。全部备注正则扫描：电话 / 邮箱 / handle / 完整邮编 **0**。
+  - 剩下的问题：kind 误归（找同伴记成 offer）、轻度上下文补全（"搬家"由上一行推出）。
+- **主 agent 使用备注**：r3-p54 / r7-p54 判官 4.33 / 4.11，动作合适率 0.778 / 0.765，"不该说却说" 0。但**点名 0 次**——录制里的提问没有遇到"备注里有人公开提供过正好对口的东西"的情形，验收 2 的"复现一次 6 小时窗口外的正确点名"**未达**。
+- 热路径：主 agent 不新增模型调用（备注由 cron 写、主 agent 只读，`listForGroup` 一次查询）。
+- 删除路径：到期、来源置空、群停用、`/forget` 均有集成或单元测试。
+
+**验收对照。** 1 忠实度 ≥95%：**未达**（80%），0 条联系方式：**达标**。2 点名复现：**未达**。3 热路径：**达标**。4 删除路径测试：**达标**。5 `pnpm check`：**达标**（db 基线除外）。
+
+**后续。** 忠实度再往上需要把"kind 判断"交给代码（例如句中有"有人…吗 / 一起"判为 need），并把整理员换成更强的模型（`MEMORY_MODEL`）；点名需要一组专门的探针问题（例如有人公开说有空房后，另一成员找房），可在联合实测里观察。
