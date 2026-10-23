@@ -85,7 +85,7 @@ P36：Jev targeted 策略与本地无 Telegram 对话验证，Codex 本地实现
 | P52 | 研究员子 agent 与单一出口 | [P52-researcher-subagent-single-voice.md](./P52-researcher-subagent-single-voice.md) | P51 | 9 | claude | 完成（口径经用户调整） | 研究员无 voice / 无出站、写手唯一作者、stages/ 工厂、预算撞线转交付 | 2026-10-22 |
 | P53 | 主 agent「群里的 A2H」 | [P53-group-main-agent.md](./P53-group-main-agent.md) | P52 | 9 | claude | 完成（实测合适率 1.0；点名实测可用） | 群视图、研究员 asTool、say_briefly / refer_member、写前新鲜度检查、群里时刻评测 | 2026-10-22 |
 | P54 | 群记忆：成员公开备注 | [P54-group-memory.md](./P54-group-memory.md) | P53 | 7 | claude | 完成（原话摘录、kind ≥85%；备注点名已复现） | member_notes 表、后台整理员、30 天到期与删除路径 | 2026-10-22 |
-| P55 | 先回一句再查 | [P55-ack-then-research.md](./P55-ack-then-research.md) | A：P52；B：P53 | 9 | claude | A 完成（实测 👀 5 s、致谢 👍）；B 按条件待定 | A：直接提问先点 👀、无下文撤回；B：后台研究任务与回推 | 2026-10-22 |
+| P55 | 先回一句再查 | [P55-ack-then-research.md](./P55-ack-then-research.md) | A：P52；B：P53 | 9 | claude | 完成：A 交付；B 经用户决定按条件暂缓 | A：直接提问先点 👀、无下文撤回；B：后台研究任务与回推 | 2026-10-22 |
 
 ## 波次与并行
 
