@@ -1,6 +1,6 @@
 # P55 先回一句再查
 
-状态：阶段 A 已实现（0.37.0）；阶段 B 按下文条件待定（2026-10-22 用户以 /goal 授权推进；D1 按推荐先做表情）。负责人 claude。依赖：阶段 A 只依赖 P52（可与 P53 并行）；阶段 B 依赖 P53（主 agent 决定是否研究、新鲜度检查）。范围 阶段 A：`packages/agent`（主 agent 调研究前的表情确认）；阶段 B：`packages/queue`、`apps/worker`（后台研究任务与回推）、`packages/agent`。
+状态：阶段 A 完成（实测 👀 5 s、致谢 👍）；阶段 B 按下文条件待定（2026-10-22 用户以 /goal 授权推进；D1 按推荐先做表情）。负责人 claude。依赖：阶段 A 只依赖 P52（可与 P53 并行）；阶段 B 依赖 P53（主 agent 决定是否研究、新鲜度检查）。范围 阶段 A：`packages/agent`（主 agent 调研究前的表情确认）；阶段 B：`packages/queue`、`apps/worker`（后台研究任务与回推）、`packages/agent`。
 
 总体路线见 [P52](./P52-researcher-subagent-single-voice.md#总体路线p52p55)。
 

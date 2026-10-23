@@ -1,6 +1,6 @@
 # P54 群记忆：成员公开备注与后台整理
 
-状态：实现完成，验收部分达标（2026-10-23）。D1–D3 按推荐执行。负责人 claude。依赖：P53（主 agent 与 `groupView`）。范围 `packages/db`（新表与迁移）、`packages/agent`（整理员 agent、`groupView.memberNotes`）、`packages/queue` 与 `apps/worker`（后台整理任务、保留期 cron）、`packages/eval`。
+状态：完成（2026-10-23，验收口径经用户调整，见文末）。D1–D3 按推荐执行。负责人 claude。依赖：P53（主 agent 与 `groupView`）。范围 `packages/db`（新表与迁移）、`packages/agent`（整理员 agent、`groupView.memberNotes`）、`packages/queue` 与 `apps/worker`（后台整理任务、保留期 cron）、`packages/eval`。
 
 总体路线见 [P52](./P52-researcher-subagent-single-voice.md#总体路线p52p55)。
 
@@ -80,3 +80,7 @@ P53 的群视图只覆盖最近 6 小时、20 行。群里真正有用的"谁有
 - 备注文本不再由模型改写：模型只挑哪一行、给出 kind，存的是该行原话（去 @、电话 / 邮箱 / 完整邮编 / 门牌号替换为 …，保留"31号"这类日期，≤120 字）。原话之外的内容从结构上进不了备注。
 - kind 由措辞决定（求购 / 想要 → need，提供 / 送 / 转 / 我这还有 → offer，"定好了 / 搞定了" → resolved，其余问句 → need；模型给 offer 或 resolved 但原句没有对应措辞时降为 context）。
 - 判官抽查（每次 40 条，判"只说原句说过的、kind 正确"）：run 7 窗口 34 / 34 / 37，留出的 run 6 窗口 13 / 13 / 13（共 15 条）——**约 87–89%，仍未到 95%**。剩下的分歧几乎都是 kind（如邀约算 need 还是 offer、条件性打算算不算 resolved），同一批数据两次抽样相差 ±3/40，判官本身的一致性已是上限的一部分。
+
+## 验收口径调整（2026-10-23，用户决定）
+
+用户同意把验收 1（忠实度 ≥95%）改为：备注文字 **100% 来自原话**（结构保证）、联系方式 **0**、kind 一致率 **≥85%**（判官抽查：run 7 窗口 34 / 34 / 37 / 40，留出的 run 6 窗口 13 / 13 / 13 / 15）——**达标**。

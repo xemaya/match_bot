@@ -1,6 +1,6 @@
 # P53 主 agent「群里的 A2H」
 
-状态：完成（2026-10-23），回路验收部分达标、联合实测已跑。D1–D4 按推荐执行。负责人 claude。依赖：P52（研究员子 agent、单一出口、`stages/` 工厂）。范围 `packages/agent`（新主 agent 阶段、研究员 `asTool`、新发言工具与门）、`packages/domain`（出站 mention 渲染）、`apps/worker/src/pipeline/inbound.ts`（主 agent 接入、写前新鲜度检查）、`packages/eval`（"群里时刻"评测）。
+状态：完成（2026-10-23，验收口径经用户调整，见文末）。D1–D4 按推荐执行。负责人 claude。依赖：P52（研究员子 agent、单一出口、`stages/` 工厂）。范围 `packages/agent`（新主 agent 阶段、研究员 `asTool`、新发言工具与门）、`packages/domain`（出站 mention 渲染）、`apps/worker/src/pipeline/inbound.ts`（主 agent 接入、写前新鲜度检查）、`packages/eval`（"群里时刻"评测）。
 
 总体路线见 [P52](./P52-researcher-subagent-single-voice.md#总体路线p52p55)。
 
@@ -153,3 +153,7 @@ T2 的"群里时刻"评测落为 `pnpm humanness moves <源轮次> <录制轮次
 ## 定向实测：点名（2026-10-23）
 
 阿明（演员账号）先发"搬完家多出一辆自行车 我用不上了 谁要白送 Mile End自取"（triage：peer_offer_noted），25 秒后小林发"有人有闲置自行车吗 想骑去学校 预算不多"。triage 放行（0.37.3 的"之前的对口提供不算已处理"），主 agent 群视图 peerOffers=1，**不做研究直接 `refer_member`**，5 秒后发出："你那辆搬完家多出来的自行车还送吗 这边有人正想骑去学校 预算不多 正好对得上"，mention 为阿明的 bot id。点名在真实 Telegram 上**可用**。
+
+## 验收口径调整（2026-10-23，用户决定）
+
+用户同意把验收 2（非检索发言占比 15–40%）改为**场景对口率**：该点名时点名（探针 4/5、实测 1/1）、对 A2H 的致谢回 👍（实测 1/1）、群友自己在聊时沉默（run 8 实测 44/44）——**达标**。
