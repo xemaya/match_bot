@@ -18,16 +18,16 @@ export const scenes: Record<SceneId, Scene> = {
   catalogue: {
     id: 'catalogue',
     tools: ['record_request', 'find_suppliers', 'find_peer_supply', 'reply_in_group'],
-    requiredTools: ['record_request', 'find_suppliers', 'reply_in_group'],
+    requiredTools: ['record_request', 'find_suppliers'],
     workflow:
-      'For moving, end-of-tenancy cleaning or furniture services, call record_request then find_suppliers. Compare a small set of returned providers and use reply_in_group for catalogue references. Starting/hourly rates are not a job quote. Ask only for scope that changes the search or quote. If the catalogue is empty, public information research may find useful evidence; keep unverified providers distinct from catalogue entries.',
+      'For moving, end-of-tenancy cleaning or furniture services, call record_request then find_suppliers. The writer names the returned catalogue providers; note which fit best. Starting/hourly rates are not a job quote. Ask only for scope that changes the search or quote. If the catalogue is empty, public information research may find useful evidence; keep unverified providers distinct from catalogue entries.',
   },
   marketplace: {
     id: 'marketplace',
     tools: ['market_search', 'market_enrich'],
     requiredTools: [],
     workflow:
-      'Search A2H for second-hand items, housing, carry or companions. market_search needs separate subjects, their aliases, explicit hard conditions and soft preferences; use selected task goal IDs. Search subjects independently, then use source-attested aliases or a productive next page for missing coverage. Preserve the original trade direction supplied by the server. Read market_enrich for shortlisted refs before replying. A bundle price is not an individual item price; an active post can contain sold items. Do not replace a hard rent cap with an assumed all-in total. Prefer a few eligible options; explain leads as partial, never include facts from excluded offers, and reply with the selected m refs. Once the marketplace has returned candidates, spend the remaining turns reading and recording them, not on public web search; web search is only for a fact no listing can give, or when the marketplace has no eligible option.',
+      'Search A2H for second-hand items, housing, carry or companions. market_search needs separate subjects, their aliases, explicit hard conditions and soft preferences; use selected task goal IDs. Search subjects independently, then use source-attested aliases or a productive next page for missing coverage. Preserve the original trade direction supplied by the server. Read market_enrich for shortlisted refs before replying. A bundle price is not an individual item price; an active post can contain sold items. Do not replace a hard rent cap with an assumed all-in total. Prefer a few eligible options; treat leads as partial, never carry facts from excluded offers, and record the selected m refs. Once the marketplace has returned candidates, spend the remaining turns reading and recording them, not on public web search; web search is only for a fact no listing can give, or when the marketplace has no eligible option.',
   },
   information: {
     id: 'information',
@@ -55,14 +55,14 @@ export const scenes: Record<SceneId, Scene> = {
     tools: ['xhs_search', 'xhs_read_notes', 'reply_with_xhs_notes'],
     requiredTools: [],
     workflow:
-      'Discover concrete places, activities or shows for the requested occasion. Vary themes only for genuinely broad requests. Optional XHS discovery can identify entities; read available full notes and verify current practical details through official public information when possible. Merge aliases only for the same event, venue and edition. A roundup is a discovery source, not an activity. Distinguish future openings from current events and exclude expired ones. Keep prices scoped to the requested people/components; free child entry does not establish a free family outing. Prefer a few well-supported options over filling a quota. Use the evidence reply tool appropriate to the returned reference type.',
+      'Discover concrete places, activities or shows for the requested occasion. Vary themes only for genuinely broad requests. Optional XHS discovery can identify entities; read available full notes and verify current practical details through official public information when possible. Merge aliases only for the same event, venue and edition. A roundup is a discovery source, not an activity. Distinguish future openings from current events and exclude expired ones. Keep prices scoped to the requested people/components; free child entry does not establish a free family outing. Prefer a few well-supported options over filling a quota.',
   },
   unsupported: {
     id: 'unsupported',
     tools: [],
     requiredTools: [],
     workflow:
-      'Job recruitment is outside the supported scope. Acknowledge without researching, recording an unsupported task or promising action.',
+      'Job recruitment is outside the supported scope. Do not research, record an unsupported task or promise action.',
   },
 };
 

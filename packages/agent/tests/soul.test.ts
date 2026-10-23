@@ -48,15 +48,21 @@ it('does not inject mandatory handoff phrasing or a two-sentence card-report ins
   expect(prompt).not.toContain('Code supplies each offer price');
 });
 
-it.each([false, true])(
-  'keeps ENFP voice with fact and permission boundaries (delivery=%s)',
-  async (finalAnswerOnly) => {
-    const agent = createMatchAgent(deps as never, { phase: 0, finalAnswerOnly }).agent;
-    const prompt = await agent.getSystemPrompt(new RunContext(context));
-    expect(prompt).toContain('ENFP');
-    expect(prompt).toContain('Never pay, contact, book, transact');
-    expect(prompt).toContain('not guaranteed current stock');
-    expect(prompt).toContain('Do not append stock disclaimers');
-    expect(prompt).not.toContain('one is appended automatically');
-  },
-);
+it('keeps ENFP voice with fact and permission boundaries in the writer', async () => {
+  const agent = createMatchAgent(deps as never, { phase: 0, finalAnswerOnly: true }).agent;
+  const prompt = await agent.getSystemPrompt(new RunContext(context));
+  expect(prompt).toContain('ENFP');
+  expect(prompt).toContain('Never pay, contact, book, transact');
+  expect(prompt).toContain('not guaranteed current stock');
+  expect(prompt).toContain('Do not append stock disclaimers');
+  expect(prompt).not.toContain('one is appended automatically');
+});
+
+it('gives the researcher the fact and permission boundaries but no voice (P52)', async () => {
+  const agent = createMatchAgent(deps as never, { phase: 0 }).agent;
+  const prompt = await agent.getSystemPrompt(new RunContext(context));
+  expect(prompt).not.toContain('ENFP');
+  expect(prompt).toContain('Never pay, contact, book, transact');
+  expect(prompt).toContain('not guaranteed current stock');
+  expect(prompt).not.toContain('Do not append stock disclaimers');
+});

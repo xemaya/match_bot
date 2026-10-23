@@ -13,9 +13,17 @@ import { resolveTaskMarketTarget, bindTaskMarketPlan } from './task-market-plan.
 import { decrypt, encrypt } from '@matchbot/shared';
 import { RunContext, RunState as SdkRunState } from '@openai/agents';
 import { z } from 'zod';
-import { AGENT_VERSION, createMatchAgent } from './agent.js';
+import { createMatchAgent } from './agent.js';
+import { acknowledgeAsk, withdrawAckIfSilent } from './ack-reaction.js';
+import { buildGroupView } from './group-context.js';
+import { createMainAgent } from './stages/main.js';
+import { AGENT_VERSION } from './agent-version.js';
+import { createStatusAgent } from './stages/status.js';
+import { createWriterAgent } from './stages/writer.js';
 import type { AgentDeps, MatchContext } from './context.js';
 import { createPgSession } from './session.js';
+import { executionInputStats } from './prompts/runtime-context.js';
+import { needsNoResearch } from './prompts/tool-contract.js';
 import { restoreSearchContext } from './restore-search-context.js';
 import { prepareTaskTurn } from './task-preparation.js';
 import { refreshTaskSourceMemory } from './task-source-refresh.js';
@@ -62,6 +70,19 @@ const DELIVERY_RESERVE_MS = DELIVERY_WINDOW_MS;
 const FINALIZATION_WINDOW_MS = DELIVERY_WINDOW_MS;
 
 export async function runInbound(p: {
+  deps: AgentDeps;
+  ctx: MatchContext;
+  input: string;
+  checkpoint?: string | null;
+}): Promise<RunOutcome> {
+  // P55 stage A: a direct ask gets a 👀 before any model call; withdrawn if nothing is sent.
+  if (p.deps.answerRequests && !p.checkpoint) await acknowledgeAsk(p.deps, p.ctx);
+  const outcome = await runInboundTurn(p);
+  if (outcome.kind === 'completed') await withdrawAckIfSilent(p.deps, p.ctx);
+  return outcome;
+}
+
+async function runInboundTurn(p: {
   deps: AgentDeps;
   ctx: MatchContext;
   input: string;
@@ -174,12 +195,15 @@ export async function runInbound(p: {
     return { kind: 'completed', toolsCalled: [] };
   }
   if (!ambiguous) await refreshTaskSourceMemory({ ...p, agentVersion: AGENT_VERSION });
+  if (p.deps.mainAgent && p.deps.answerRequests && p.ctx.groupId && !ambiguous)
+    return runMainAgent(p, session);
   const { agent, runner } = createMatchAgent(p.deps, {
     context: p.ctx,
     phase: p.ctx.phase,
     input: p.ctx.currentRequest?.text ?? p.input,
     checkpointInput: p.input,
-    finalAnswerOnly: ambiguous,
+    // P52: acknowledgements, unsupported asks and ambiguous binding go straight to the writer.
+    finalAnswerOnly: ambiguous || (!!p.deps.answerRequests && needsNoResearch(p.deps, p.ctx)),
     inputRef: p.ctx.sourceMessageId,
     requestContext: p.ctx,
     ...(p.ctx.task ? { taskId: p.ctx.task.id } : {}),
@@ -198,9 +222,11 @@ export async function runInbound(p: {
       ...RUN_OPTIONS,
       signal: researchSignal,
     });
+    await traceExecutionInput(p);
   } catch (error) {
     if (!p.deps.answerRequests || !(error instanceof Error) || /Guardrail/.test(error.name))
       throw error;
+    await traceExecutionInput(p, error.name);
     p.ctx.sourceFailures ??= [];
     p.ctx.sourceFailures.push('processing:' + error.name);
     await p.deps.repos.traces.create({
@@ -239,6 +265,7 @@ export async function runInbound(p: {
     !p.ctx.outboundBlocked &&
     !p.ctx.answerInputExhausted &&
     p.ctx.task?.nextStep?.action !== 'ask_user' &&
+    p.ctx.researchOutcome !== 'skip' &&
     pendingResearchConditions(p.ctx).length &&
     (p.deps.marketSearch || p.deps.webSearch?.research)
   ) {
@@ -283,18 +310,150 @@ export async function runInbound(p: {
     p.ctx.sourceFailures.push('processing:invalid_tool_input');
     return finalizeRequest(p, session);
   }
+  if (p.deps.answerRequests && !result.interruptions.length && (await routeResearchOutcome(p)))
+    return { kind: 'completed', toolsCalled: [] };
   if (
     p.deps.answerRequests &&
     !result.interruptions.length &&
     !p.ctx.answerRecorded &&
     !p.ctx.replySuppressed &&
-    p.ctx.currentRequest?.isActionable &&
-    p.ctx.currentRequest.demand.category !== 'job'
+    (p.ctx.currentRequest?.isActionable || p.ctx.researchOutcome !== undefined) &&
+    p.ctx.currentRequest?.demand.category !== 'job'
   )
     return canSkipSupplementReply(p.ctx) || p.ctx.outboundBlocked || p.ctx.answerInputExhausted
       ? respondRequestStatus(p, session)
       : finalizeRequest(p, session);
   return settle(p.deps, p.ctx, result);
+}
+
+/**
+ * P53: a group turn goes to A2H-in-the-group. It decides the move itself (silence, react, a
+ * fact-free line, a referral, or research then answer); code keeps the hard floor: a direct ask
+ * that ends without any reply still gets the writer (after research) or the fixed status.
+ */
+async function runMainAgent(
+  p: { deps: AgentDeps; ctx: MatchContext; input: string },
+  session: ReturnType<typeof createPgSession>,
+): Promise<RunOutcome> {
+  p.ctx.isMainAgentRun = true;
+  p.ctx.mainStartedAt = new Date().toISOString();
+  const view = await buildGroupView(p.deps.repos, p.ctx);
+  if (view) p.ctx.groupView = view;
+  await p.deps.repos.traces.create({
+    kind: 'gate',
+    inputRef: p.ctx.sourceMessageId,
+    phase: p.ctx.phase,
+    latencyMs: 0,
+    costMicro: 0,
+    output: {
+      gate: 'main_agent',
+      decision: 'entered',
+      openThreads: p.ctx.groupView?.myOpenThreads.length ?? 0,
+      peerOffers: p.ctx.groupView?.peerOffers.length ?? 0,
+    },
+  });
+  const { agent, runner } = createMainAgent(p.deps, {
+    context: p.ctx,
+    phase: p.ctx.phase,
+    input: p.ctx.currentRequest?.text ?? p.input,
+    checkpointInput: p.input,
+    inputRef: p.ctx.sourceMessageId,
+    ...(p.ctx.task ? { taskId: p.ctx.task.id } : {}),
+  });
+  let result: SettleResult | undefined;
+  for (let attempt = 0; !result; attempt++) {
+    try {
+      result = await runner.run(agent, p.input, {
+        context: p.ctx,
+        session,
+        maxTurns: 6,
+        signal: AbortSignal.timeout(Math.max(1, (p.ctx.runDeadlineAt ?? Date.now()) - Date.now())),
+      });
+    } catch (error) {
+      if (!(error instanceof Error) || /Guardrail/.test(error.name)) throw error;
+      await p.deps.repos.traces.create({
+        kind: 'gate',
+        inputRef: p.ctx.sourceMessageId,
+        phase: p.ctx.phase,
+        latencyMs: 0,
+        costMicro: 0,
+        output: {
+          gate: 'main_agent',
+          decision: 'failed',
+          errorKind: error.name,
+          detail: error.message.slice(0, 200),
+          attempt,
+        },
+      });
+      // 2026-10-23 replay: a provider error on the first call (0 input tokens) cost a direct ask
+      // its answer. Nothing was sent or researched yet, so one retry is safe.
+      const untouched = !p.ctx.answerRecorded && p.ctx.researchOutcome === undefined;
+      const timeLeft = (p.ctx.runDeadlineAt ?? 0) - Date.now() > FINALIZATION_WINDOW_MS;
+      if (attempt === 0 && untouched && timeLeft) continue;
+      return failMainAgent(p, session, error);
+    }
+  }
+  if (result.interruptions.some((item) => !hasValidArguments(item.arguments)))
+    return finalizeRequest(p, session);
+  if (
+    !result.interruptions.length &&
+    !p.ctx.answerRecorded &&
+    !p.ctx.replySuppressed &&
+    !isUnsolicitedGroupTurn(p.ctx) &&
+    p.ctx.currentRequest?.isActionable &&
+    p.ctx.currentRequest.demand.category !== 'job'
+  )
+    return p.ctx.researchOutcome === 'deliver' && !p.ctx.outboundBlocked
+      ? finalizeRequest(p, session)
+      : respondRequestStatus(p, session);
+  return settle(p.deps, p.ctx, result);
+}
+
+async function failMainAgent(
+  p: { deps: AgentDeps; ctx: MatchContext; input: string },
+  session: ReturnType<typeof createPgSession>,
+  error: Error,
+): Promise<RunOutcome> {
+  p.ctx.sourceFailures ??= [];
+  p.ctx.sourceFailures.push('processing:' + error.name);
+  if (p.ctx.answerRecorded || p.ctx.replySuppressed) return { kind: 'completed', toolsCalled: [] };
+  p.ctx.runDeadlineAt = Math.max(p.ctx.runDeadlineAt ?? 0, Date.now() + FINALIZATION_WINDOW_MS);
+  return p.ctx.researchOutcome === 'deliver'
+    ? finalizeRequest(p, session)
+    : respondRequestStatus(p, session);
+}
+
+/**
+ * P52: whether to speak after research is decided here, not in the researcher's prompt. A skip, or
+ * nothing found for a message that did not address A2H, ends silently; true means handled.
+ */
+async function routeResearchOutcome(p: { deps: AgentDeps; ctx: MatchContext }): Promise<boolean> {
+  const outcome = p.ctx.researchOutcome;
+  const silent = outcome === 'skip' || (outcome === 'no_answer' && isUnsolicitedGroupTurn(p.ctx));
+  if (!silent || p.ctx.answerRecorded) return false;
+  p.ctx.replySuppressed = true;
+  await p.deps.repos.traces.create({
+    kind: 'gate',
+    inputRef: p.ctx.sourceMessageId,
+    phase: p.ctx.phase,
+    latencyMs: 0,
+    costMicro: 0,
+    output: { gate: 'research_route', decision: 'silent', outcome },
+  });
+  return true;
+}
+
+/** How the research input was spent: packet vs history vs tool outputs, per turn (P52 T2). */
+async function traceExecutionInput(p: { deps: AgentDeps; ctx: MatchContext }, stop?: string) {
+  if (!p.deps.answerRequests) return;
+  await p.deps.repos.traces.create({
+    kind: 'gate',
+    inputRef: p.ctx.sourceMessageId,
+    phase: p.ctx.phase,
+    latencyMs: 0,
+    costMicro: 0,
+    output: { gate: 'execution_input', ...executionInputStats(p.ctx), ...(stop ? { stop } : {}) },
+  });
 }
 
 function hasValidArguments(raw: string | undefined): boolean {
@@ -343,11 +502,10 @@ async function finalizeRequest(
     p.ctx.sourceFailures ??= [];
     p.ctx.sourceFailures.push('processing:invalid_evidence');
   }
-  const { agent, runner } = createMatchAgent(p.deps, {
+  const { agent, runner } = createWriterAgent(p.deps, {
     context: p.ctx,
     phase: p.ctx.phase,
     input: p.input,
-    finalAnswerOnly: true,
     inputRef: p.ctx.sourceMessageId,
     ...(p.ctx.task ? { taskId: p.ctx.task.id } : {}),
   });
@@ -494,11 +652,10 @@ async function respondRequestStatus(
     await status.invoke(context, '{}');
     return { kind: 'completed', toolsCalled: ['reply_request_status'] };
   }
-  const { agent, runner } = createMatchAgent(p.deps, {
+  const { agent, runner } = createStatusAgent(p.deps, {
     context: p.ctx,
     phase: p.ctx.phase,
     input: p.input,
-    requestStatusOnly: true,
     inputRef: p.ctx.sourceMessageId,
     ...(p.ctx.task ? { taskId: p.ctx.task.id } : {}),
   });
@@ -584,7 +741,8 @@ export async function resumeRun(p: {
     if (demandId) ctx.demandId = demandId;
     if (ctx.task && ctx.marketPlan) ctx.marketPlan = bindTaskMarketPlan(ctx.marketPlan, ctx.task);
   }
-  const { agent, runner } = createMatchAgent(p.deps, {
+  const resumeStage = ctx.isMainAgentRun && !ctx.isRequestStatusRun && !ctx.isAnswerFinalization;
+  const { agent, runner } = (resumeStage ? createMainAgent : createMatchAgent)(p.deps, {
     context: ctx,
     phase: ctx.phase,
     requestStatusOnly: !!ctx.isRequestStatusRun,

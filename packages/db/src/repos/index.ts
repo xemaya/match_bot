@@ -14,6 +14,7 @@ import { tracesRepo } from './traces.js';
 import { usersRepo } from './users.js';
 import { tasksRepo } from './tasks.js';
 import { executionsRepo } from './executions.js';
+import { memberNotesRepo } from './member-notes.js';
 import { withExecutionFence } from '../execution-fence.js';
 import type { ExecutionLease } from '@matchbot/domain';
 
@@ -34,6 +35,7 @@ function rawRepositories(prisma: PrismaClient, senderAccountId = '') {
     approvals: approvalsRepo(prisma),
     outbound: outboundRepo(prisma, senderAccountId),
     traces: tracesRepo(prisma),
+    memberNotes: memberNotesRepo(prisma),
   };
 }
 type RawRepositories = ReturnType<typeof rawRepositories>;

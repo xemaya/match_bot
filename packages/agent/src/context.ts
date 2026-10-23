@@ -20,7 +20,7 @@ import type { CurrentRequest } from './current-request.js';
 import type { KnowledgeSource } from './knowledge-evidence.js';
 import type { MarketPlan } from './market-strategy.js';
 import type { MarketCandidate, MarketResearchQuery } from './market-research.js';
-import type { GroupLine } from './group-context.js';
+import type { GroupLine, GroupView } from './group-context.js';
 
 /** 一次 run 的上下文。Session 粒度是用户；群上下文与开放需求经这里 + instructions 注入。 */
 export interface MatchContext {
@@ -45,6 +45,18 @@ export interface MatchContext {
   requestCategory?: DemandCategory;
   /** Recent public group conversation (aliases only), oldest first; loaded by the pipeline for group messages. */
   groupTranscript?: GroupLine[];
+  /** When the source message arrived; group views are bounded by it so a replay sees no future. */
+  sourceReceivedAt?: string;
+  /** P53: what A2H sees of the group besides the conversation (aliases only; built by run.ts). */
+  groupView?: GroupView;
+  /** P55: A2H put a 👀 on this direct ask; withdrawn if the run sends nothing. */
+  ackReactionSent?: boolean;
+  /** P53: this run is the group main agent's (approval resume rebuilds the same stage). */
+  isMainAgentRun?: boolean;
+  /** P53: when the main agent started; group lines stored after it are shown as new. */
+  mainStartedAt?: string;
+  /** P53: group lines that arrived while this run was working (refreshed before each model call). */
+  newGroupLines?: GroupLine[];
   /** Server-selected, owner/scope-checked task; never accept an arbitrary model-provided snapshot. */
   task?: UserTask;
   taskCandidates?: UserTask[];
@@ -68,6 +80,10 @@ export interface MatchContext {
   pageLinks?: Array<{ text: string; url: string }>;
   sourceFailures?: string[];
   answerRecorded?: boolean;
+  /** P52: how the researcher ended (finish_research, or deliver/ask_user via record_task_progress). */
+  researchOutcome?: 'deliver' | 'no_answer' | 'skip';
+  /** P52: the researcher's note for the writer (≤200 chars); never sent to the group. */
+  researchNote?: string;
   /** Server-bound same-task context addition after a delivered answer; not a general silent-mode permission. */
   quietSupplementTaskId?: string;
   quietSupplementEvidenceIds?: string[];
@@ -79,6 +95,16 @@ export interface MatchContext {
   demandId?: string;
   demand?: DemandDraft;
   recentReplies: string[];
+  /** P52: find_suppliers results for the writer's reply_in_group (the researcher no longer replies). */
+  catalogueSuppliers?: Array<{
+    id: string;
+    name?: string | undefined;
+    price?: string | null | undefined;
+    phone?: string | null | undefined;
+    whatsapp?: string | null | undefined;
+    pool?: string | undefined;
+    reasons: string[];
+  }>;
   /** find_suppliers 本次 run 是否查过且为空；web_search 的前置条件之一（P14）。 */
   supplierSearchEmpty?: boolean;
   /**
@@ -110,6 +136,8 @@ export interface MatchContext {
 }
 
 export interface AgentDeps {
+  /** P53: group turns go to the main agent (A2H in the group) instead of researcher → writer. */
+  mainAgent?: boolean;
   /** P22 production enables request-bound answering; legacy injected callers remain compatible. */
   answerRequests?: boolean;
   /** Enable the persistent task preparation stage once migrations and the full flow are deployed. */

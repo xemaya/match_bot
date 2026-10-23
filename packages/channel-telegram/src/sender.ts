@@ -1,4 +1,5 @@
 import type { OutboundMessage } from '@matchbot/db';
+import { REACTION_CLEAR } from '@matchbot/domain';
 import type { Logger } from '@matchbot/shared';
 import { Api, GrammyError, type Bot } from 'grammy';
 import { z } from 'zod';
@@ -133,10 +134,11 @@ export function createTelegramSender(p: { bot: Bot; logger: Logger }) {
             });
           if (!(await options.beforeSend())) return { kind: 'not_started' };
           externalStarted = true;
+          // P55: REACTION_CLEAR withdraws A2H's reaction (an ack 👀 that led to no reply).
           const result: unknown = await p.bot.api.setMessageReaction(
             chatId,
             Number(m.replyToMessageId),
-            [{ type: 'emoji', emoji: m.text as ReactionEmoji }],
+            m.text === REACTION_CLEAR ? [] : [{ type: 'emoji', emoji: m.text as ReactionEmoji }],
           );
           if (result !== true)
             throw new TelegramSendError(m.id, null, {

@@ -1,22 +1,54 @@
 import type { AgentDeps, MatchContext } from '../context.js';
 import { sceneContract } from './policy/scenes.js';
 
+/** Tools that talk to the group. The researcher never gets these (P52); the writer gets one of them. */
+export const WRITER_REPLY_TOOLS = [
+  'reply_to_request',
+  'reply_in_group',
+  'reply_with_xhs_notes',
+  'react',
+  'do_nothing',
+] as const;
+
+/** Task states that need no research: the writer acknowledges, clarifies or stays quiet directly. */
+export function needsNoResearch(deps: AgentDeps, ctx: MatchContext): boolean {
+  return (
+    ['completed', 'cancelled', 'acknowledged', 'ambiguous', 'unbound'].includes(
+      ctx.taskUpdate?.kind ?? '',
+    ) || sceneContract(deps, ctx).id === 'unsupported'
+  );
+}
+
+/** The researcher's tool set: scene research tools, never an outbound tool, and finish_research. */
 export function executionToolNames(deps: AgentDeps, ctx: MatchContext): Set<string> {
-  if (['completed', 'cancelled', 'acknowledged'].includes(ctx.taskUpdate?.kind ?? ''))
-    return new Set(['react', 'do_nothing']);
-  if (['ambiguous', 'unbound'].includes(ctx.taskUpdate?.kind ?? ''))
-    return new Set(['reply_to_request']);
+  if (needsNoResearch(deps, ctx)) return new Set(['finish_research']);
   const scene = sceneContract(deps, ctx);
-  const names = new Set(['reply_to_request', 'react', 'do_nothing', ...scene.tools]);
-  if (scene.id !== 'unsupported') {
-    if (deps.webSearch?.research) names.add('search_information');
-    if (deps.pageReader) names.add('read_web_page');
-    if (deps.taskRequests) {
-      names.add('record_task_progress');
-      names.add('read_task_sources');
-    }
+  const names = new Set([
+    'finish_research',
+    ...scene.tools.filter((t) => !(WRITER_REPLY_TOOLS as readonly string[]).includes(t)),
+  ]);
+  if (deps.webSearch?.research) names.add('search_information');
+  if (deps.pageReader) names.add('read_web_page');
+  if (deps.taskRequests) {
+    names.add('record_task_progress');
+    names.add('read_task_sources');
   }
   return names;
+}
+
+/** The writer's tool set for this context: one reply tool, or react/do_nothing for an acknowledgement. */
+export function writerToolNames(deps: AgentDeps, ctx: MatchContext): Set<string> {
+  const kind = ctx.taskUpdate?.kind ?? '';
+  if (
+    ['completed', 'cancelled', 'acknowledged'].includes(kind) ||
+    sceneContract(deps, ctx).id === 'unsupported'
+  )
+    return new Set(['react', 'do_nothing']);
+  if (['ambiguous', 'unbound'].includes(kind)) return new Set(['reply_to_request']);
+  if (ctx.catalogueSuppliers?.length) return new Set(['reply_in_group', 'reply_to_request']);
+  if (ctx.xhsNotes?.length && !ctx.knowledgeSources?.length && !ctx.marketPlan && deps.xhsSearch)
+    return new Set(['reply_with_xhs_notes']);
+  return new Set(['reply_to_request']);
 }
 
 export function validateToolContract(deps: AgentDeps, ctx: MatchContext, names: string[]): void {
@@ -57,6 +89,7 @@ const PROTOCOL_TOOLS = [
   'close_demand',
   'do_nothing',
   'react',
+  'finish_research',
 ] as const;
 export function validatePromptReferences(prompt: string, tools: ReadonlySet<string>): void {
   for (const name of PROTOCOL_TOOLS)

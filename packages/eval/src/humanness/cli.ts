@@ -6,6 +6,7 @@ import { envSchema } from '@matchbot/shared';
 import { exportRound } from './export.js';
 import { freezeCase } from './freeze.js';
 import { createJudgeClient, judgeRound } from './judge.js';
+import { judgeMoves, movesReportSchema } from './moves.js';
 import { renderComparison, roundMetrics, targetsMet } from './metrics.js';
 import { replayCase } from './replay.js';
 import { caseFixtureSchema, judgeReportSchema, roundSchema, type Round } from './schema.js';
@@ -127,6 +128,31 @@ try {
         `judge ${model}: blind accuracy ${report.blind.accuracy} (n=${report.blind.n}, AUC ${report.blind.auc}, bot mean ${report.blind.botMeanProbability}, human mean ${report.blind.humanMeanProbability}); mean score ${report.meanScore}/5 → ${judgePath(name)}`,
       );
       for (const r of report.ratings) out(`  ${r.id} ${r.score}/5 ${r.mainIssue} — ${r.reason}`);
+      break;
+    }
+    case 'moves': {
+      const [sourceName, recordedName] = [process.argv[3], process.argv[4]];
+      if (!sourceName || !recordedName)
+        throw new Error('usage: humanness moves <sourceRound> <recordedRound> [--model id]');
+      const baseUrl = process.env.OPENAIROUTER_BASE_URL;
+      const apiKey = process.env.OPENAIROUTER_API_KEY;
+      if (!baseUrl || !apiKey)
+        throw new Error('moves needs OPENAIROUTER_BASE_URL and OPENAIROUTER_API_KEY');
+      const model = arg('--model') ?? process.env.JUDGE_MODEL ?? 'gpt-6.1-sol';
+      const report = movesReportSchema.parse(
+        await judgeMoves({
+          source: readRound(sourceName),
+          recorded: readRound(recordedName),
+          client: createJudgeClient({ baseUrl, apiKey, model }),
+        }),
+      );
+      const path = roundPath(recordedName).replace(/\.json$/, '.moves.json');
+      writeJson(path, report);
+      out(
+        `moves ${model}: fit ${report.fitRate} (n=${report.n}), wrong speak ${report.wrongSpeak}, missed answer ${report.missedAnswer} → ${path}`,
+      );
+      for (const i of report.items)
+        out(`  ${i.id} ${i.actual}→ideal ${i.ideal} ${i.fits ? 'fits' : 'MISS'} — ${i.reason}`);
       break;
     }
     case 'freeze': {

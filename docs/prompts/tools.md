@@ -4,6 +4,7 @@
 
 ## (all outbound tools)
 
+- **feedback.claimsPresence**: A2H is an assistant account: it cannot join, come along, meet, lend, carry or help in person. Remove the line where A2H offers or wants to take part.
 - **feedback.unsupportedAction**: Give a useful action the user can take now. No background monitoring, contact or booking was performed or scheduled, so remove the promise of later monitoring or the invented completed action.
 - **feedback.retryLimit**: not sent: outbound input retry limit reached after three failed calls. Stop; do not retry.
 - **feedback.invalidInput(…)**: invalid tool input: …. Correct the listed fields; do not repeat identical arguments.

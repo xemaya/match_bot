@@ -7,7 +7,7 @@ import { voiceLayer } from '../voice.js';
  * longer researches gets no scene workflow, and the voice always comes last, nearest to generation.
  */
 export type PromptLayer = 'trust' | 'fact' | 'delivery' | 'scene' | 'voice';
-export type PromptStageId = 'triage' | 'plan' | 'research' | 'write' | 'status' | 'legacy';
+export type PromptStageId = 'triage' | 'plan' | 'research' | 'write' | 'main' | 'status' | 'legacy';
 
 export const STAGE_MATRIX: Record<
   PromptStageId,
@@ -16,12 +16,16 @@ export const STAGE_MATRIX: Record<
   triage: { layers: ['trust'], purpose: '一次小调用判断这条群消息该不该管' },
   plan: { layers: ['trust'], purpose: '把当前消息绑定到任务；不写给人看' },
   research: {
-    layers: ['trust', 'fact', 'delivery', 'scene', 'voice'],
-    purpose: '按场景研究；也可以直接回复，所以带 voice',
+    layers: ['trust', 'fact', 'scene'],
+    purpose: '按场景研究；不对群说话（P52），以 finish_research / record_task_progress 交给写手',
   },
   write: {
     layers: ['trust', 'fact', 'delivery', 'voice'],
-    purpose: '只剩 reply_to_request；读证据包写群聊那句话和证据卡',
+    purpose: '唯一对群说话的阶段：按场景一个回复工具，读证据包与研究备忘写那句话',
+  },
+  main: {
+    layers: ['trust', 'fact', 'delivery', 'voice'],
+    purpose: '群里的 A2H（P53）：决定说不说、怎么说，需要事实时派研究员，唯一的说话者',
   },
   status: { layers: [], purpose: '代码生成的固定状态，模型只负责调用' },
   legacy: {

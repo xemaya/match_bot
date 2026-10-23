@@ -175,7 +175,8 @@ export function outboundRepo(prisma: PrismaClient, accountId = '') {
               draft.channel,
               draft.target,
               source.id,
-              draft.kind === 'reaction' ? 'reaction' : 'reply',
+              // P55: an ack 👀, its withdrawal and a closing 👍 are separate reactions.
+              draft.kind === 'reaction' ? 'reaction:' + draft.text : 'reply',
             ]),
           );
           const existing = await tx.outboundMessage.findUnique({ where: { requestKey } });
@@ -536,6 +537,24 @@ export function outboundRepo(prisma: PrismaClient, accountId = '') {
         select: { id: true, text: true, kind: true, sentAt: true },
       });
     },
+    /** P53 freshness: what A2H queued or sent to a chat after a time (any run), oldest first. */
+    createdForTargetSince(
+      target: string,
+      p: { since: Date; limit: number },
+    ): Promise<Array<{ id: string; text: string; sourceMessageId: string | null }>> {
+      return prisma.outboundMessage.findMany({
+        where: {
+          target,
+          kind: { not: 'reaction' },
+          status: { in: ['pending', 'sending', 'sent', 'dry_run'] },
+          text: { not: '' },
+          createdAt: { gt: p.since },
+        },
+        orderBy: { createdAt: 'asc' },
+        take: Math.min(Math.max(1, p.limit), 50),
+        select: { id: true, text: true, sourceMessageId: true },
+      });
+    },
     /** When A2H last delivered a reply addressed to this member in this chat; null when never. */
     async lastSentToUser(target: string, mentionUserId: string): Promise<Date | null> {
       const row = await prisma.outboundMessage.findFirst({
@@ -552,11 +571,28 @@ export function outboundRepo(prisma: PrismaClient, accountId = '') {
       return row?.sentAt ?? null;
     },
 
+    /**
+     * P53: short notifications (say_briefly / refer_member) that mentioned this member since a time,
+     * sent or still queued. Over-counts a member's own brief replies, which only makes A2H point
+     * people at them less often.
+     */
+    async countMentionsSince(target: string, mentionUserId: string, since: Date): Promise<number> {
+      return prisma.outboundMessage.count({
+        where: {
+          target,
+          mentionUserId,
+          kind: 'notification',
+          status: { in: ['pending', 'sending', 'sent', 'dry_run'] },
+          createdAt: { gte: since },
+        },
+      });
+    },
+
     /** Texts A2H actually sent to this member in this chat lately, oldest first. */
     async recentSentToUser(
       target: string,
       mentionUserId: string,
-      p: { since: Date; limit: number },
+      p: { since: Date; limit: number; before?: Date },
     ): Promise<string[]> {
       const rows = await prisma.outboundMessage.findMany({
         where: {
@@ -564,7 +600,7 @@ export function outboundRepo(prisma: PrismaClient, accountId = '') {
           mentionUserId,
           status: 'sent',
           kind: { not: 'reaction' },
-          sentAt: { gte: p.since },
+          sentAt: { gte: p.since, ...(p.before ? { lt: p.before } : {}) },
         },
         orderBy: { sentAt: 'desc' },
         take: p.limit,

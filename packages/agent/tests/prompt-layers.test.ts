@@ -52,13 +52,18 @@ describe('stage matrix is the single declaration of what each stage reads', () =
     expect(STAGE_MATRIX.plan.layers).toEqual(['trust']);
     expect(STAGE_MATRIX.status.layers).toEqual([]);
   });
-  it('puts the voice last in the writing stages, after policy and protocol', async () => {
-    for (const mode of [{}, { finalAnswerOnly: true }]) {
-      const text = await prompt(mode);
-      expect(text.endsWith(CHAT_LINE)).toBe(true);
-      expect(text.indexOf(SOUL)).toBeGreaterThan(text.indexOf(TRUST_RULES));
-      expect(text.indexOf(SOUL)).toBeGreaterThan(text.indexOf('Today is'));
-    }
+  it('puts the voice last in the writing stage, after policy and protocol', async () => {
+    const text = await prompt({ finalAnswerOnly: true });
+    expect(text.endsWith(CHAT_LINE)).toBe(true);
+    expect(text.indexOf(SOUL)).toBeGreaterThan(text.indexOf(TRUST_RULES));
+    expect(text.indexOf(SOUL)).toBeGreaterThan(text.indexOf('Today is'));
+  });
+  it('keeps the voice and delivery rules out of the researcher (P52)', async () => {
+    const text = await prompt({});
+    expect(text).not.toContain(SOUL);
+    expect(text).not.toContain(CHAT_LINE);
+    expect(text).not.toContain(DELIVERY_RULES);
+    expect(STAGE_MATRIX.research.layers).not.toContain('voice');
   });
   it('gives research the scene workflow and write only the finalization protocol', async () => {
     const research = await prompt({});

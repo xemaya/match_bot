@@ -5,6 +5,7 @@ import { askClarificationTool } from '../../src/tools/ask-clarification.js';
 import { notifyUserTool } from '../../src/tools/notify-user.js';
 import { pushLeadTool } from '../../src/tools/push-lead.js';
 import { replyInGroupTool } from '../../src/tools/reply-in-group.js';
+import { referMemberTool, sayBrieflyTool } from '../../src/tools/group-speech.js';
 
 const VAN = { id: 'a', name: 'Van Co', roughPrice: '£40/h', telegram: '@vanco' };
 const NO_TG = { id: 'b', name: 'NoTelegram Ltd', roughPrice: null, telegram: null };
@@ -19,7 +20,9 @@ function deps(goodVerdict = true) {
           Promise.resolve({ id: 'om', status, ...(d as object) }),
         ),
         countSentToTargetSince: vi.fn(() => Promise.resolve(0)),
+        countMentionsSince: vi.fn(() => Promise.resolve(0)),
       },
+      users: { findById: vi.fn(() => Promise.resolve({ id: 'u9', externalId: '99' })) },
       traces: { create: vi.fn(() => Promise.resolve({})) },
       suppliers: {
         findByIds: vi.fn((ids: string[]) =>
@@ -50,6 +53,7 @@ function makeCtx(phase: 0 | 1 | 2): MatchContext {
     sourceMessageId: 'm1',
     source: { messageId: '77', userId: '42' },
     demand: { category: 'man_and_van', confidence: 0.9 },
+    groupTranscript: [{ at: '', speaker: '成员abcd', text: '我有多的拍子', memberId: 'u9' }],
   };
 }
 const rc = (ctx: MatchContext) => ({ context: ctx }) as never;
@@ -78,6 +82,18 @@ const cases = [
     make: pushLeadTool,
     args: { supplierId: 'a', demandSummary: '8 boxes, E14 to SE1, Sunday' },
     target: '@vanco',
+  },
+  {
+    name: 'say_briefly',
+    make: sayBrieflyTool,
+    args: { text: '这个我也想知道哈' },
+    target: '-1',
+  },
+  {
+    name: 'refer_member',
+    make: referMemberTool,
+    args: { alias: '成员abcd', text: '你说有多的拍子 能借一把不' },
+    target: '-1',
   },
 ] as const;
 

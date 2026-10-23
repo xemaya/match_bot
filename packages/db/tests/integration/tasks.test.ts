@@ -344,6 +344,25 @@ describe('task repository', () => {
       });
       expect(await repos.tasks.findOpenByScope(access)).toEqual([]);
     }));
+  it('lists open tasks across members in one chat, newest first and capped (P53)', async () =>
+    withTestDb(async (tx) => {
+      const { repos, access, message } = await seed(tx);
+      const task = await repos.tasks.create({
+        access,
+        sourceMessageId: message.id,
+        intentKey: 'furniture',
+        objective: '找到桌椅',
+        category: 'second_hand',
+      });
+      const inChat = { channel: access.scope.channel, chatId: access.scope.chatId };
+      expect(
+        (await repos.tasks.findOpenInChat({ ...inChat, limit: 6 })).map((t) => t.id),
+      ).toContain(task.id);
+      expect(
+        await repos.tasks.findOpenInChat({ ...inChat, chatId: 'elsewhere', limit: 6 }),
+      ).toEqual([]);
+      await expect(repos.tasks.findOpenInChat({ ...inChat, limit: 50 })).rejects.toThrow();
+    }));
   it('deletes inactive task personal data and event checkpoints, retaining recent tasks', async () =>
     withTestDb(async (tx) => {
       const { repos, access, message } = await seed(tx);

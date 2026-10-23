@@ -67,6 +67,17 @@ const restorePolicies = new Map<
   { isActive: boolean; phase: 0 | 1 | 2; rateLimitPerDay: number }
 >();
 let tokens = 0;
+// A recording that was stopped mid-run leaves its copies running/accepted, and the next recording
+// of the same member then waits on user_busy forever (2026-10-23: 5 of 17 asks never ran).
+const abandoned = await prisma.message.updateMany({
+  where: {
+    executionStatus: { in: ['running', 'accepted'] },
+    // Any age: the group is at Phase 0 and only recordings use it while one runs (a chain stopped
+    // seconds earlier left fresh rows that blocked r3-p54's first two asks).
+  },
+  data: { executionStatus: 'failed', executionError: 'abandoned_replay' },
+});
+if (abandoned.count) out(`released ${abandoned.count} abandoned executions`);
 try {
   for (const c of source.cases) {
     if (only && c.id !== only) continue;
@@ -104,8 +115,15 @@ try {
     }
     // As in p47: tasks the author opened at or after that moment (the task this very message
     // created) are expired so the replay plans the ask afresh instead of continuing them.
+    // 2026-10-23: any open status, not only active — a task a previous recording left waiting
+    // for the user made the planner acknowledge the re-asked printer request and stay silent.
+    // Every member's: the main agent's group view lists open threads across the chat (P53).
     const expired = await prisma.task.updateMany({
-      where: { userId: author.id, status: 'active', createdAt: { gte: original.receivedAt } },
+      where: {
+        chatId: group.externalId,
+        status: { notIn: ['completed', 'cancelled', 'expired'] },
+        createdAt: { gte: original.receivedAt },
+      },
       data: { status: 'expired' },
     });
     const externalId = 'replay-' + original.id + '-' + Date.now();

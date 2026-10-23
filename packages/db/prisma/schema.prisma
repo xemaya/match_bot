@@ -108,6 +108,7 @@ model User {
   sessionItems SessionItem[]
   runStates    RunState[]
   tasks        Task[]
+  memberNotes  MemberNote[]
 
   @@unique([channel, externalId])
   @@map("users")
@@ -125,9 +126,12 @@ model Group {
   isActive          Boolean  @default(true) @map("is_active")
   createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  /// P54: the last group message (insert time) the notetaker has read; null = never.
+  memoryConsolidatedAt DateTime? @map("memory_consolidated_at") @db.Timestamptz
 
-  messages Message[]
-  supplies Supply[]
+  messages    Message[]
+  supplies    Supply[]
+  memberNotes MemberNote[]
 
   @@unique([channel, externalId])
   @@map("groups")
@@ -162,6 +166,7 @@ model Message {
   task Task? @relation(fields: [taskId],references: [id],onDelete: SetNull)
   runStates RunState[]
   outbounds OutboundMessage[]
+  memberNotes MemberNote[]
 
   @@unique([groupId, externalId])
   @@index([userId, receivedAt])
@@ -444,4 +449,34 @@ model DecisionTrace {
   @@index([kind, createdAt])
   @@index([inputRef])
   @@map("decision_traces")
+}
+
+/// P54: what a member said in public in one group, as a short third-person note written by the
+/// background notetaker. Only from group messages, never private chats; deleted (not blanked) when
+/// it expires 30 days after its source message, when the source is deleted, or by /forget.
+enum MemberNoteKind {
+  offer
+  need
+  context
+  resolved
+}
+
+model MemberNote {
+  id              String         @id @default(cuid())
+  groupId         String         @map("group_id")
+  userId          String         @map("user_id")
+  kind            MemberNoteKind
+  text            String
+  sourceMessageId String         @map("source_message_id")
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  expiresAt       DateTime       @map("expires_at") @db.Timestamptz
+  supersededAt    DateTime?      @map("superseded_at") @db.Timestamptz
+
+  group   Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message Message @relation(fields: [sourceMessageId], references: [id], onDelete: Cascade)
+
+  @@index([groupId, userId])
+  @@index([expiresAt])
+  @@map("member_notes")
 }
