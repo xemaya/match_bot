@@ -12,6 +12,7 @@ export { runInbound, resumeRun, SDK_VERSION, type RunOutcome } from './run.js';
 export type { AgentDeps, MatchContext } from './context.js';
 export { triageInbound, type TriageOutcome, type TriageVerdict } from './triage.js';
 export { consolidateGroupMemory } from './stages/notetaker.js';
+export { reactToThanks } from './ack-reaction.js';
 export {
   loadGroupTranscript,
   buildGroupTranscript,

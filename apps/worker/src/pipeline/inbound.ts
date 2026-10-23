@@ -1,5 +1,6 @@
 import {
   loadGroupTranscript,
+  reactToThanks,
   triageInbound as triageInboundFn,
   type AgentDeps,
   type MatchContext,
@@ -243,6 +244,17 @@ export async function processInbound(
           reason: dropReason,
           triage,
         });
+        // A thanks addressed to A2H gets a 👍 instead of silence (no model call).
+        if (dropReason === 'acknowledgement' && msg.addressedToBot && group)
+          await reactToThanks(d, {
+            execution,
+            chatId: msg.chatId,
+            groupId: group.id,
+            phase,
+            sourceMessageId: stored.id,
+            channel: msg.channel,
+            source: { messageId: msg.messageId, userId: msg.userId },
+          });
         return;
       }
       decision = {

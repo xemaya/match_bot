@@ -16,7 +16,7 @@ async function sendReaction(
   deps: AgentDeps,
   ctx: MatchContext,
   text: string,
-  gate: 'ack_reaction' | 'ack_withdrawn',
+  gate: 'ack_reaction' | 'ack_withdrawn' | 'thanks_reaction',
 ): Promise<boolean> {
   if (!ctx.source) return false;
   const draft: OutboundDraftInput = {
@@ -61,4 +61,21 @@ export async function acknowledgeAsk(deps: AgentDeps, ctx: MatchContext): Promis
 export async function withdrawAckIfSilent(deps: AgentDeps, ctx: MatchContext): Promise<void> {
   if (ctx.ackReactionSent && !ctx.answerRecorded)
     await sendReaction(deps, ctx, REACTION_CLEAR, 'ack_withdrawn');
+}
+
+/**
+ * P55 follow-up (2026-10-23): a thanks or an ok addressed to A2H used to end at triage with no
+ * response at all; a member would at least leave a 👍. Code-only, no model call, same reaction gate.
+ */
+export async function reactToThanks(
+  deps: AgentDeps,
+  p: Pick<
+    MatchContext,
+    'execution' | 'chatId' | 'groupId' | 'phase' | 'sourceMessageId' | 'channel'
+  > & {
+    source: { messageId: string; userId: string };
+  },
+): Promise<void> {
+  const ctx: MatchContext = { ...p, userId: p.execution?.userId ?? '', recentReplies: [] };
+  if (ctx.groupId && ctx.execution) await sendReaction(deps, ctx, '👍', 'thanks_reaction');
 }
