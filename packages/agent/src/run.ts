@@ -360,32 +360,38 @@ async function runMainAgent(
     inputRef: p.ctx.sourceMessageId,
     ...(p.ctx.task ? { taskId: p.ctx.task.id } : {}),
   });
-  let result: SettleResult;
-  try {
-    result = await runner.run(agent, p.input, {
-      context: p.ctx,
-      session,
-      maxTurns: 6,
-      signal: AbortSignal.timeout(Math.max(1, (p.ctx.runDeadlineAt ?? Date.now()) - Date.now())),
-    });
-  } catch (error) {
-    if (!(error instanceof Error) || /Guardrail/.test(error.name)) throw error;
-    p.ctx.sourceFailures ??= [];
-    p.ctx.sourceFailures.push('processing:' + error.name);
-    await p.deps.repos.traces.create({
-      kind: 'gate',
-      inputRef: p.ctx.sourceMessageId,
-      phase: p.ctx.phase,
-      latencyMs: 0,
-      costMicro: 0,
-      output: { gate: 'main_agent', decision: 'failed', errorKind: error.name },
-    });
-    if (p.ctx.answerRecorded || p.ctx.replySuppressed)
-      return { kind: 'completed', toolsCalled: [] };
-    p.ctx.runDeadlineAt = Math.max(p.ctx.runDeadlineAt ?? 0, Date.now() + FINALIZATION_WINDOW_MS);
-    return p.ctx.researchOutcome === 'deliver'
-      ? finalizeRequest(p, session)
-      : respondRequestStatus(p, session);
+  let result: SettleResult | undefined;
+  for (let attempt = 0; !result; attempt++) {
+    try {
+      result = await runner.run(agent, p.input, {
+        context: p.ctx,
+        session,
+        maxTurns: 6,
+        signal: AbortSignal.timeout(Math.max(1, (p.ctx.runDeadlineAt ?? Date.now()) - Date.now())),
+      });
+    } catch (error) {
+      if (!(error instanceof Error) || /Guardrail/.test(error.name)) throw error;
+      await p.deps.repos.traces.create({
+        kind: 'gate',
+        inputRef: p.ctx.sourceMessageId,
+        phase: p.ctx.phase,
+        latencyMs: 0,
+        costMicro: 0,
+        output: {
+          gate: 'main_agent',
+          decision: 'failed',
+          errorKind: error.name,
+          detail: error.message.slice(0, 200),
+          attempt,
+        },
+      });
+      // 2026-10-23 replay: a provider error on the first call (0 input tokens) cost a direct ask
+      // its answer. Nothing was sent or researched yet, so one retry is safe.
+      const untouched = !p.ctx.answerRecorded && p.ctx.researchOutcome === undefined;
+      const timeLeft = (p.ctx.runDeadlineAt ?? 0) - Date.now() > FINALIZATION_WINDOW_MS;
+      if (attempt === 0 && untouched && timeLeft) continue;
+      return failMainAgent(p, session, error);
+    }
   }
   if (result.interruptions.some((item) => !hasValidArguments(item.arguments)))
     return finalizeRequest(p, session);
@@ -401,6 +407,20 @@ async function runMainAgent(
       ? finalizeRequest(p, session)
       : respondRequestStatus(p, session);
   return settle(p.deps, p.ctx, result);
+}
+
+async function failMainAgent(
+  p: { deps: AgentDeps; ctx: MatchContext; input: string },
+  session: ReturnType<typeof createPgSession>,
+  error: Error,
+): Promise<RunOutcome> {
+  p.ctx.sourceFailures ??= [];
+  p.ctx.sourceFailures.push('processing:' + error.name);
+  if (p.ctx.answerRecorded || p.ctx.replySuppressed) return { kind: 'completed', toolsCalled: [] };
+  p.ctx.runDeadlineAt = Math.max(p.ctx.runDeadlineAt ?? 0, Date.now() + FINALIZATION_WINDOW_MS);
+  return p.ctx.researchOutcome === 'deliver'
+    ? finalizeRequest(p, session)
+    : respondRequestStatus(p, session);
 }
 
 /**

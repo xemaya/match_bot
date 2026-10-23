@@ -2047,6 +2047,35 @@ describe('P53 main agent in the group', () => {
     );
     model.assertComplete();
   });
+  it('retries once when the first main-agent call fails before anything happened', async () => {
+    const model = new ScriptedModel([
+      [functionCall('say_briefly', { text: '这个我也想知道哈' }, { callId: 'b' })],
+    ]);
+    let failed = false;
+    const flaky = {
+      getResponse: (req: never) => {
+        if (!failed) {
+          failed = true;
+          return Promise.reject(new Error('provider hiccup'));
+        }
+        return model.getResponse(req);
+      },
+      getStreamedResponse: (req: never) => model.getStreamedResponse(req),
+    };
+    const { deps, repos } = groupDeps(model);
+    await runInbound({
+      deps: { ...deps, modelProvider: { getModel: () => flaky } } as never,
+      ctx: { ...groupCtx(true), runDeadlineAt: Date.now() + 200000 } as never,
+      input: '有人知道这附近哪里修车吗',
+    });
+    expect(repos.outbound.create).toHaveBeenCalledOnce();
+    expect(repos.traces.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        output: expect.objectContaining({ gate: 'main_agent', decision: 'failed', attempt: 0 }),
+      }),
+    );
+    model.assertComplete();
+  });
   it('shows lines that arrived while working before the next move', async () => {
     const model = new ScriptedModel([
       [functionCall('do_nothing', { reason: 'already answered' }, { callId: 'quiet' })],
