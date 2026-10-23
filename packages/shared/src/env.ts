@@ -70,6 +70,13 @@ export const envSchema = z
     // 吃喝玩乐类需求的兜底搜索：小红书（经 Sandbase）。不配则这类需求走 Tavily 或不回。
     SANDBASE_API_KEY: z.string().min(1).optional(),
     // 多轮研究由环境显式启用；新环境默认保留单次推荐协议。
+    /** P54: model for the background notetaker; defaults to DEEPSEEK_MODEL. */
+    MEMORY_MODEL: z.string().min(1).optional(),
+    /** P53: group turns go to the main agent (A2H in the group); false keeps researcher → writer. */
+    GROUP_MAIN_AGENT: z
+      .enum(['true', 'false'])
+      .default('true')
+      .transform((value) => value === 'true'),
     XHS_RESEARCH_ENABLED: z
       .enum(['true', 'false'])
       .default('false')

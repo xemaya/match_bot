@@ -48,6 +48,8 @@ export const researchContextSchema = z.object({
   answerInputExhausted: z.boolean().optional(),
   isAnswerFinalization: z.boolean().optional(),
   isRequestStatusRun: z.boolean().optional(),
+  isMainAgentRun: z.boolean().optional(),
+  mainStartedAt: z.string().max(40).optional(),
   outboundBlocked: z.boolean().optional(),
   quietSupplementTaskId: z.string().optional(),
   quietSupplementEvidenceIds: z.array(z.string()).max(128).optional(),
@@ -148,6 +150,8 @@ export function restoreSearchContext(ctx: MatchContext, snapshot: string): Match
       : {}),
     ...(saved.replySuppressed !== undefined ? { replySuppressed: saved.replySuppressed } : {}),
     ...(saved.outboundBlocked !== undefined ? { outboundBlocked: saved.outboundBlocked } : {}),
+    ...(saved.isMainAgentRun !== undefined ? { isMainAgentRun: saved.isMainAgentRun } : {}),
+    ...(saved.mainStartedAt ? { mainStartedAt: saved.mainStartedAt } : {}),
     ...(saved.isRequestStatusRun !== undefined
       ? { isRequestStatusRun: saved.isRequestStatusRun }
       : {}),

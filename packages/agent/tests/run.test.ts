@@ -4,6 +4,7 @@ import { assistantMessage, functionCall, ScriptedModel } from '@openai/agents/te
 import { describe, expect, it, vi } from 'vitest';
 import { AGENT_VERSION, createMatchAgent } from '../src/agent.js';
 import { WRITER_REPLY_TOOLS } from '../src/prompts/tool-contract.js';
+import { memberAlias } from '../src/group-context.js';
 import { resumeRun, runInbound } from '../src/run.js';
 import { taskSchema, reviseTaskRequirements, recordTaskProgress } from '@matchbot/domain';
 
@@ -1893,6 +1894,172 @@ describe('P52 researcher hand-off', () => {
     // The writer reads the researcher's note; the researcher's own prompt carries no voice.
     expect(JSON.stringify(model.calls[1]?.request.input)).toContain('k1 fits');
     expect(JSON.stringify(model.calls[0]?.request.systemInstructions)).not.toContain('ENFP');
+    model.assertComplete();
+  });
+});
+
+describe('P53 main agent in the group', () => {
+  const member = 'member-7';
+  const transcript = [
+    {
+      at: '2026-10-22T10:00Z',
+      speaker: memberAlias(member),
+      text: '我有多的羽毛球拍 谁要借',
+      memberId: member,
+    },
+  ];
+  function groupDeps(model: ScriptedModel, fresh: unknown[] = [], notes: unknown[] = []) {
+    const made = makeDeps(model);
+    const repos = {
+      ...made.repos,
+      tasks: { findOpenInChat: vi.fn(() => Promise.resolve([])) },
+      memberNotes: { listForGroup: vi.fn(() => Promise.resolve(notes)) },
+      messages: { createdInGroupSince: vi.fn(() => Promise.resolve(fresh)) },
+      users: { findById: vi.fn(() => Promise.resolve({ id: member, externalId: '777' })) },
+      outbound: {
+        ...made.repos.outbound,
+        createdForTargetSince: vi.fn(() => Promise.resolve([])),
+        countMentionsSince: vi.fn(() => Promise.resolve(0)),
+      },
+    };
+    made.deps.evaluateOutbound.mockResolvedValue({
+      ok: true,
+      worthReplying: 3,
+      languageOk: 1,
+      mentionsUnverified: 0,
+    });
+    return { ...made, repos, deps: { ...made.deps, repos, answerRequests: true, mainAgent: true } };
+  }
+  const groupCtx = (addressed: boolean) => ({
+    ...ctx(0),
+    addressedToBot: addressed,
+    source: { messageId: 'tg-1', userId: '42' },
+    groupTranscript: transcript,
+  });
+
+  it('stays silent on an overheard message without researching', async () => {
+    const model = new ScriptedModel([
+      [functionCall('do_nothing', { reason: 'members are on it' }, { callId: 'quiet' })],
+    ]);
+    const { deps, repos } = groupDeps(model);
+    const result = await runInbound({
+      deps: deps as never,
+      ctx: groupCtx(false),
+      input: '周日打球吗',
+    });
+    expect(result.kind).toBe('completed');
+    expect(repos.outbound.create).not.toHaveBeenCalled();
+    model.assertComplete();
+  });
+  it('researches through the researcher, then answers as the only voice', async () => {
+    const model = new ScriptedModel([
+      [functionCall('research', { focus: '' }, { callId: 'r' })],
+      [functionCall('finish_research', { outcome: 'no_answer', note: '' }, { callId: 'fin' })],
+      [
+        functionCall(
+          'reply_to_request',
+          { kind: 'no_match', text: 'E14 附近暂时没有合适的', refs: [] },
+          { callId: 'answer' },
+        ),
+      ],
+    ]);
+    const { deps, repos } = groupDeps(model);
+    await runInbound({ deps: deps as never, ctx: groupCtx(true), input: '附近有便宜打印机吗？' });
+    expect(repos.outbound.create).toHaveBeenCalledOnce();
+    // The researcher's call carries no voice; the main agent's does.
+    expect(JSON.stringify(model.calls[1]?.request.systemInstructions)).not.toContain('ENFP');
+    expect(JSON.stringify(model.calls[2]?.request.systemInstructions)).toContain('ENFP');
+    model.assertComplete();
+  });
+  it('points the asker at a member who offered, mentioning that member by channel id', async () => {
+    const model = new ScriptedModel([
+      [
+        functionCall(
+          'refer_member',
+          { alias: memberAlias(member), text: '你说有多的拍子 能借一把不' },
+          { callId: 'refer' },
+        ),
+      ],
+    ]);
+    const { deps, repos } = groupDeps(model);
+    await runInbound({
+      deps: deps as never,
+      ctx: groupCtx(true),
+      input: '周日想打羽毛球 谁有拍子借我？',
+    });
+    expect(repos.outbound.create).toHaveBeenCalledWith(
+      expect.objectContaining({ mentionUserId: '777', replyToMessageId: 'tg-1' }),
+      'dry_run',
+    );
+    // The model saw the alias and the offer, never the member's ids.
+    const packet = JSON.stringify(model.calls[0]?.request.input);
+    expect(packet).toContain('peerOffers');
+    expect(packet).not.toContain(member);
+    expect(packet).not.toContain('777');
+    model.assertComplete();
+  });
+  it('refers to a member known only from an earlier note, without exposing ids (P54)', async () => {
+    const earlier = 'member-3';
+    const model = new ScriptedModel([
+      [
+        functionCall(
+          'refer_member',
+          { alias: memberAlias(earlier), text: '你之前说房间空出来了 还在不' },
+          { callId: 'refer' },
+        ),
+      ],
+    ]);
+    const { deps, repos } = groupDeps(
+      model,
+      [],
+      [{ userId: earlier, kind: 'offer', text: '月底有间房空出来 在 Mile End 找房' }],
+    );
+    await runInbound({
+      deps: deps as never,
+      ctx: { ...groupCtx(true), groupTranscript: [] },
+      input: 'Mile End 附近 找房 有人知道吗？',
+    });
+    expect(repos.outbound.create).toHaveBeenCalledWith(
+      expect.objectContaining({ mentionUserId: '777' }),
+      'dry_run',
+    );
+    const packet = JSON.stringify(model.calls[0]?.request.input);
+    expect(packet).toContain('memberNotes');
+    expect(packet).not.toContain(earlier);
+    model.assertComplete();
+  });
+  it('rejects facts in say_briefly and lets the model fix the line', async () => {
+    const model = new ScriptedModel([
+      [functionCall('say_briefly', { text: '那家20镑一小时' }, { callId: 'b1' })],
+      [functionCall('say_briefly', { text: '这个我也想知道哈' }, { callId: 'b2' })],
+    ]);
+    const { deps, repos } = groupDeps(model);
+    await runInbound({
+      deps: deps as never,
+      ctx: groupCtx(true),
+      input: '有人知道这附近哪里修车吗',
+    });
+    expect(repos.outbound.create).toHaveBeenCalledOnce();
+    expect(repos.outbound.create).toHaveBeenCalledWith(
+      expect.objectContaining({ text: '这个我也想知道哈' }),
+      'dry_run',
+    );
+    model.assertComplete();
+  });
+  it('shows lines that arrived while working before the next move', async () => {
+    const model = new ScriptedModel([
+      [functionCall('do_nothing', { reason: 'already answered' }, { callId: 'quiet' })],
+    ]);
+    const { deps } = groupDeps(model, [
+      {
+        id: 'later',
+        userId: 'member-9',
+        text: '我刚问到了 不用找了',
+        receivedAt: new Date('2026-10-22T10:05:00Z'),
+      },
+    ]);
+    await runInbound({ deps: deps as never, ctx: groupCtx(false), input: '哪里有修车的' });
+    expect(JSON.stringify(model.calls[0]?.request.input)).toContain('我刚问到了 不用找了');
     model.assertComplete();
   });
 });

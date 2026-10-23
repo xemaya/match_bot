@@ -55,6 +55,7 @@ export function buildDeps(p: { env?: Env; cards?: ApprovalCards } = {}): WorkerD
     env,
     answerRequests: true,
     taskRequests: true,
+    mainAgent: env.GROUP_MAIN_AGENT,
     repos,
     jev,
     thresholds: DEFAULT_THRESHOLDS,

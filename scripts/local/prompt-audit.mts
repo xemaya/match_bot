@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { RunContext } from '@openai/agents';
 import { createMatchAgent, AGENT_VERSION } from '../../packages/agent/src/agent.js';
+import { createMainAgent } from '../../packages/agent/src/stages/main.js';
 import type { AgentDeps, MatchContext } from '../../packages/agent/src/context.js';
 import { selectScene } from '../../packages/agent/src/prompts/policy/scenes.js';
 import { STAGE_MATRIX } from '../../packages/agent/src/prompts/stages/index.js';
@@ -41,7 +42,7 @@ const cases = [
   ['other', '附近超市'],
   ['job', '找工作'],
 ] as const;
-const BUDGET = { planning: 6500, execution: 8000, finalization: 5500 } as const;
+const BUDGET = { planning: 6500, execution: 8000, finalization: 5500, main: 8000 } as const;
 
 function synthetic(category: (typeof cases)[number][0], text: string): MatchContext {
   return {
@@ -82,13 +83,17 @@ const seen = new Set<string>();
 for (const [category, text] of cases) {
   const ctx = synthetic(category, text);
   const scene = selectScene(ctx);
-  for (const stage of ['planning', 'execution', 'finalization'] as const) {
-    const agent = createMatchAgent(deps, {
-      phase: 0,
-      context: ctx,
-      taskPlanningOnly: stage === 'planning',
-      finalAnswerOnly: stage === 'finalization',
-    }).agent;
+  for (const stage of ['planning', 'execution', 'finalization', 'main'] as const) {
+    // P53: the main agent is the group's voice; its prompt reads the group, not the scene.
+    const agent =
+      stage === 'main'
+        ? createMainAgent(deps, { phase: 0, context: { ...ctx, groupId: 'synthetic-group' } }).agent
+        : createMatchAgent(deps, {
+            phase: 0,
+            context: ctx,
+            taskPlanningOnly: stage === 'planning',
+            finalAnswerOnly: stage === 'finalization',
+          }).agent;
     const rc = new RunContext(ctx);
     const prompt = (await agent.getSystemPrompt(rc))!;
     if (prompt.length > BUDGET[stage])
@@ -103,8 +108,8 @@ for (const [category, text] of cases) {
       sha256: createHash('sha256').update(prompt).digest('hex'),
       tools: tools.map((t) => (t.type === 'function' ? t.name! : t.type)),
     });
-    // Planning does not depend on the scene; one dump is enough.
-    const key = stage === 'planning' ? 'planning' : `${stage}-${scene}`;
+    // Planning and main do not depend on the scene; one dump each is enough.
+    const key = stage === 'planning' || stage === 'main' ? stage : `${stage}-${scene}`;
     if (seen.has(key)) continue;
     seen.add(key);
     const file = `${OUT}/${key}.md`;

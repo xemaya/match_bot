@@ -7,7 +7,7 @@ import { voiceLayer } from '../voice.js';
  * longer researches gets no scene workflow, and the voice always comes last, nearest to generation.
  */
 export type PromptLayer = 'trust' | 'fact' | 'delivery' | 'scene' | 'voice';
-export type PromptStageId = 'triage' | 'plan' | 'research' | 'write' | 'status' | 'legacy';
+export type PromptStageId = 'triage' | 'plan' | 'research' | 'write' | 'main' | 'status' | 'legacy';
 
 export const STAGE_MATRIX: Record<
   PromptStageId,
@@ -22,6 +22,10 @@ export const STAGE_MATRIX: Record<
   write: {
     layers: ['trust', 'fact', 'delivery', 'voice'],
     purpose: '唯一对群说话的阶段：按场景一个回复工具，读证据包与研究备忘写那句话',
+  },
+  main: {
+    layers: ['trust', 'fact', 'delivery', 'voice'],
+    purpose: '群里的 A2H（P53）：决定说不说、怎么说，需要事实时派研究员，唯一的说话者',
   },
   status: { layers: [], purpose: '代码生成的固定状态，模型只负责调用' },
   legacy: {

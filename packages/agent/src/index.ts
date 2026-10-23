@@ -11,7 +11,13 @@ export { createPgSession } from './session.js';
 export { runInbound, resumeRun, SDK_VERSION, type RunOutcome } from './run.js';
 export type { AgentDeps, MatchContext } from './context.js';
 export { triageInbound, type TriageOutcome, type TriageVerdict } from './triage.js';
-export { loadGroupTranscript, buildGroupTranscript, type GroupLine } from './group-context.js';
+export { consolidateGroupMemory } from './stages/notetaker.js';
+export {
+  loadGroupTranscript,
+  buildGroupTranscript,
+  memberAlias,
+  type GroupLine,
+} from './group-context.js';
 
 export { createDeepSeekSearch } from './deepseek-search.js';
 // P50 humanness loop (packages/eval): freeze a real run's research packet and replay finalization only.

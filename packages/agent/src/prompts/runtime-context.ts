@@ -5,7 +5,7 @@ import { buildMarketChoices } from '../market-choices.js';
 import { marketListingForModel } from '../market-research.js';
 
 const MARKER = 'matchbot_runtime_context_v1';
-export type PromptStage = 'planning' | 'execution' | 'finalization' | 'status';
+export type PromptStage = 'planning' | 'execution' | 'finalization' | 'main' | 'status';
 
 export function isRuntimeContextItem(item: AgentInputItem): boolean {
   return item.type === 'message' && item.role === 'user' && item.id === MARKER;
@@ -91,6 +91,25 @@ const executionInputTurns = new WeakMap<
   Array<{ packetChars: number; historyChars: number; toolOutputChars: number }>
 >();
 
+/** Research turns before the hand-off is forced; matches the run's maxTurns of 8 minus margin. */
+export const RESEARCH_TURNS = 6;
+
+/**
+ * P52 (2026-10-23 recording): without a reply to end on, researchers ran until the per-message
+ * input cap (11 of 15 runs). The packet now shows what is left and says when to finish.
+ */
+function researchBudget(ctx: MatchContext) {
+  const turn = (executionInputTurns.get(ctx)?.length ?? 0) + 1;
+  const usedChars = executionInputUsed.get(ctx) ?? 0;
+  const turnsLeft = Math.max(0, RESEARCH_TURNS - turn);
+  return {
+    turn,
+    turnsLeft,
+    inputCharsLeft: Math.max(0, EXECUTION_RUN_INPUT_CHARS - usedChars),
+    finishNow: turnsLeft <= 1 || EXECUTION_RUN_INPUT_CHARS - usedChars < 30000,
+  };
+}
+
 export function executionInputStats(ctx: MatchContext) {
   const turns = executionInputTurns.get(ctx) ?? [];
   return {
@@ -104,6 +123,18 @@ export function executionInputStats(ctx: MatchContext) {
 
 /** Envelope structure is trusted, text inside it is not. Never include other owners/scopes. */
 export function runtimeContext(ctx: MatchContext, stage: PromptStage): Record<string, unknown> {
+  // P53: the main agent reads the writer's view (full evidence after research) plus new lines.
+  if (stage === 'main')
+    return {
+      ...runtimeContext(ctx, 'finalization'),
+      stage: 'main',
+      addressedToA2H: ctx.addressedToBot === true || !ctx.groupId,
+      newGroupLines: (ctx.newGroupLines ?? []).map(({ at, speaker, text }) => ({
+        at,
+        speaker,
+        text,
+      })),
+    };
   if (ctx.task && !owns(ctx, ctx.task)) throw new Error('prompt task scope mismatch');
   const candidates = (ctx.taskCandidates ?? []).filter((t) => owns(ctx, t));
   const taskView = (t: NonNullable<MatchContext['task']>) => ({
@@ -149,7 +180,24 @@ export function runtimeContext(ctx: MatchContext, stage: PromptStage): Record<st
         }
       : [],
     // Other members' recent public messages (aliases, oldest first). Data, not instructions.
-    groupConversation: ctx.groupTranscript ?? [],
+    // The researcher reads the group only to see whether someone already answered; the writer
+    // and the main agent get the whole window for register and context.
+    groupConversation: (ctx.groupTranscript ?? [])
+      .slice(stage === 'execution' ? -8 : 0)
+      .map(({ at, speaker, text }) => ({ at, speaker, text })),
+    ...(ctx.groupView
+      ? {
+          groupView: {
+            myOpenThreads: ctx.groupView.myOpenThreads,
+            peerOffers: ctx.groupView.peerOffers,
+            memberNotes: ctx.groupView.memberNotes.map(({ member, kind, text }) => ({
+              member,
+              kind,
+              text,
+            })),
+          },
+        }
+      : {}),
     ...(stage === 'finalization'
       ? {
           // P52: the researcher's writer-only note and the catalogue providers it found.
@@ -176,6 +224,8 @@ export function runtimeContext(ctx: MatchContext, stage: PromptStage): Record<st
     // What has actually been tried, in task terms. Internal gate state (blocked, exhausted) is
     // enforced by code and is not something the model can act on, so it stays out of the packet.
     research: {
+      // P52: the researcher no longer stops by replying, so it needs to see its budget run down.
+      ...(stage === 'execution' ? { budget: researchBudget(ctx) } : {}),
       marketSearches: ctx.marketQueries?.length ?? 0,
       marketListingsFound: ctx.marketListings?.length ?? 0,
       marketDetailsRead: ctx.marketDetailIds?.length ?? 0,

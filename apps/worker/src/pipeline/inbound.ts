@@ -73,6 +73,16 @@ export async function processInbound(
       costMicro: 0,
     });
 
+  // P54 / AGENTS.md §6: a member can delete everything A2H noted about them, from a private chat.
+  if (isPrivate && /^\/forget(?:@\w+)?\s*$/i.test(msg.text.trim())) {
+    const member = await d.repos.users.findByExternal(msg.channel, msg.userId);
+    const deleted = member ? await d.repos.memberNotes.deleteForUser(member.id) : 0;
+    await trace('rule', `${msg.channel}:${msg.chatId}:${msg.messageId}`, {
+      outcome: 'member_notes_forgotten',
+      deleted,
+    });
+    return;
+  }
   // 代码门先于落库：被规则挡下的消息不写 messages，避免留存无用文本（AGENTS.md §6）。
   const blocked = inboundRuleReason({
     text: msg.text,

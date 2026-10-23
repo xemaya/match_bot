@@ -1,5 +1,6 @@
 import {
   type Agent,
+  type CallModelInputFilter,
   Runner,
   type FunctionToolResult,
   type ModelSettings,
@@ -135,10 +136,15 @@ export function validateInstructions(
  * Runner per run (V6: traceMetadata belongs to RunConfig, so it can only be passed to a new
  * Runner); traceIncludeSensitiveData: false keeps message text out of spans.
  */
-export function stageRunner(deps: AgentDeps, stage: PromptStage, run?: StageRun): Runner {
+export function stageRunner(
+  deps: AgentDeps,
+  stage: PromptStage,
+  run?: StageRun,
+  inputFilter: CallModelInputFilter = contextInputFilter(stage),
+): Runner {
   const promptContext = run?.context;
   return new Runner({
-    callModelInputFilter: contextInputFilter(stage),
+    callModelInputFilter: inputFilter,
     traceIncludeSensitiveData: false,
     ...(run
       ? {

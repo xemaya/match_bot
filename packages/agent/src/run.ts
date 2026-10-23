@@ -14,6 +14,9 @@ import { decrypt, encrypt } from '@matchbot/shared';
 import { RunContext, RunState as SdkRunState } from '@openai/agents';
 import { z } from 'zod';
 import { createMatchAgent } from './agent.js';
+import { acknowledgeAsk, withdrawAckIfSilent } from './ack-reaction.js';
+import { buildGroupView } from './group-context.js';
+import { createMainAgent } from './stages/main.js';
 import { AGENT_VERSION } from './agent-version.js';
 import { createStatusAgent } from './stages/status.js';
 import { createWriterAgent } from './stages/writer.js';
@@ -67,6 +70,19 @@ const DELIVERY_RESERVE_MS = DELIVERY_WINDOW_MS;
 const FINALIZATION_WINDOW_MS = DELIVERY_WINDOW_MS;
 
 export async function runInbound(p: {
+  deps: AgentDeps;
+  ctx: MatchContext;
+  input: string;
+  checkpoint?: string | null;
+}): Promise<RunOutcome> {
+  // P55 stage A: a direct ask gets a 👀 before any model call; withdrawn if nothing is sent.
+  if (p.deps.answerRequests && !p.checkpoint) await acknowledgeAsk(p.deps, p.ctx);
+  const outcome = await runInboundTurn(p);
+  if (outcome.kind === 'completed') await withdrawAckIfSilent(p.deps, p.ctx);
+  return outcome;
+}
+
+async function runInboundTurn(p: {
   deps: AgentDeps;
   ctx: MatchContext;
   input: string;
@@ -179,6 +195,8 @@ export async function runInbound(p: {
     return { kind: 'completed', toolsCalled: [] };
   }
   if (!ambiguous) await refreshTaskSourceMemory({ ...p, agentVersion: AGENT_VERSION });
+  if (p.deps.mainAgent && p.deps.answerRequests && p.ctx.groupId && !ambiguous)
+    return runMainAgent(p, session);
   const { agent, runner } = createMatchAgent(p.deps, {
     context: p.ctx,
     phase: p.ctx.phase,
@@ -305,6 +323,83 @@ export async function runInbound(p: {
     return canSkipSupplementReply(p.ctx) || p.ctx.outboundBlocked || p.ctx.answerInputExhausted
       ? respondRequestStatus(p, session)
       : finalizeRequest(p, session);
+  return settle(p.deps, p.ctx, result);
+}
+
+/**
+ * P53: a group turn goes to A2H-in-the-group. It decides the move itself (silence, react, a
+ * fact-free line, a referral, or research then answer); code keeps the hard floor: a direct ask
+ * that ends without any reply still gets the writer (after research) or the fixed status.
+ */
+async function runMainAgent(
+  p: { deps: AgentDeps; ctx: MatchContext; input: string },
+  session: ReturnType<typeof createPgSession>,
+): Promise<RunOutcome> {
+  p.ctx.isMainAgentRun = true;
+  p.ctx.mainStartedAt = new Date().toISOString();
+  const view = await buildGroupView(p.deps.repos, p.ctx);
+  if (view) p.ctx.groupView = view;
+  await p.deps.repos.traces.create({
+    kind: 'gate',
+    inputRef: p.ctx.sourceMessageId,
+    phase: p.ctx.phase,
+    latencyMs: 0,
+    costMicro: 0,
+    output: {
+      gate: 'main_agent',
+      decision: 'entered',
+      openThreads: p.ctx.groupView?.myOpenThreads.length ?? 0,
+      peerOffers: p.ctx.groupView?.peerOffers.length ?? 0,
+    },
+  });
+  const { agent, runner } = createMainAgent(p.deps, {
+    context: p.ctx,
+    phase: p.ctx.phase,
+    input: p.ctx.currentRequest?.text ?? p.input,
+    checkpointInput: p.input,
+    inputRef: p.ctx.sourceMessageId,
+    ...(p.ctx.task ? { taskId: p.ctx.task.id } : {}),
+  });
+  let result: SettleResult;
+  try {
+    result = await runner.run(agent, p.input, {
+      context: p.ctx,
+      session,
+      maxTurns: 6,
+      signal: AbortSignal.timeout(Math.max(1, (p.ctx.runDeadlineAt ?? Date.now()) - Date.now())),
+    });
+  } catch (error) {
+    if (!(error instanceof Error) || /Guardrail/.test(error.name)) throw error;
+    p.ctx.sourceFailures ??= [];
+    p.ctx.sourceFailures.push('processing:' + error.name);
+    await p.deps.repos.traces.create({
+      kind: 'gate',
+      inputRef: p.ctx.sourceMessageId,
+      phase: p.ctx.phase,
+      latencyMs: 0,
+      costMicro: 0,
+      output: { gate: 'main_agent', decision: 'failed', errorKind: error.name },
+    });
+    if (p.ctx.answerRecorded || p.ctx.replySuppressed)
+      return { kind: 'completed', toolsCalled: [] };
+    p.ctx.runDeadlineAt = Math.max(p.ctx.runDeadlineAt ?? 0, Date.now() + FINALIZATION_WINDOW_MS);
+    return p.ctx.researchOutcome === 'deliver'
+      ? finalizeRequest(p, session)
+      : respondRequestStatus(p, session);
+  }
+  if (result.interruptions.some((item) => !hasValidArguments(item.arguments)))
+    return finalizeRequest(p, session);
+  if (
+    !result.interruptions.length &&
+    !p.ctx.answerRecorded &&
+    !p.ctx.replySuppressed &&
+    !isUnsolicitedGroupTurn(p.ctx) &&
+    p.ctx.currentRequest?.isActionable &&
+    p.ctx.currentRequest.demand.category !== 'job'
+  )
+    return p.ctx.researchOutcome === 'deliver' && !p.ctx.outboundBlocked
+      ? finalizeRequest(p, session)
+      : respondRequestStatus(p, session);
   return settle(p.deps, p.ctx, result);
 }
 
@@ -626,7 +721,8 @@ export async function resumeRun(p: {
     if (demandId) ctx.demandId = demandId;
     if (ctx.task && ctx.marketPlan) ctx.marketPlan = bindTaskMarketPlan(ctx.marketPlan, ctx.task);
   }
-  const { agent, runner } = createMatchAgent(p.deps, {
+  const resumeStage = ctx.isMainAgentRun && !ctx.isRequestStatusRun && !ctx.isAnswerFinalization;
+  const { agent, runner } = (resumeStage ? createMainAgent : createMatchAgent)(p.deps, {
     context: ctx,
     phase: ctx.phase,
     requestStatusOnly: !!ctx.isRequestStatusRun,

@@ -1,6 +1,6 @@
 # P55 先回一句再查
 
-状态：待评审（2026-10-22 起草）；阶段 B 涉及 AGENTS.md §3.3 第 10 条，需用户拍板 D1–D2。负责人 claude。依赖：阶段 A 只依赖 P52（可与 P53 并行）；阶段 B 依赖 P53（主 agent 决定是否研究、新鲜度检查）。范围 阶段 A：`packages/agent`（主 agent 调研究前的表情确认）；阶段 B：`packages/queue`、`apps/worker`（后台研究任务与回推）、`packages/agent`。
+状态：阶段 A 实现中（2026-10-22 用户以 /goal 授权推进；D1 按推荐先做表情）。负责人 claude。依赖：阶段 A 只依赖 P52（可与 P53 并行）；阶段 B 依赖 P53（主 agent 决定是否研究、新鲜度检查）。范围 阶段 A：`packages/agent`（主 agent 调研究前的表情确认）；阶段 B：`packages/queue`、`apps/worker`（后台研究任务与回推）、`packages/agent`。
 
 总体路线见 [P52](./P52-researcher-subagent-single-voice.md#总体路线p52p55)。
 
@@ -29,7 +29,7 @@
 3. 研究期间同一成员的新消息不再被 `deferMs` 推迟到研究结束：主 agent 正常处理；若是补充条件，把它追加到进行中的 `research_task`（下一轮研究读到），并可只回表情。
 4. 每个请求的出站上限从"最多一条状态"变为"最多一条确认 + 一条答复"（D2）；确认句由代码从固定变体里选、不含实体 / 数字 / 链接，复用 `reply_request_status` 的放行规则。
 
-## 需要用户拍板
+## 决定（2026-10-22）
 
 - **D1 确认用表情还是一句话。** 推荐先只做阶段 A（表情），用联合实测看效果；文字确认（"我看看哈"一类）在阶段 B 再定。
 - **D2 修改 AGENTS.md §3.3 第 10 条**：允许一个请求有一条代码固定的确认 + 一条答复。只在做阶段 B 时需要。
@@ -64,3 +64,9 @@
 ## 额度
 
 阶段 A 几乎不增加生成 token。阶段 B 每次回推多一次主 agent 调用（约 1 万 token）；联合实测另批。
+
+## 实现记录（2026-10-22，阶段 A）
+
+- `ack-reaction.ts`：`runInbound` 一开始（triage 放行之后、planner 之前）对 `addressedToBot` 的群消息点 👀，走与 `react` 相同的出站门（Phase 0 dry_run、Phase 1 起直接发、不送审不调 Jev 不占频控），**不置 `answerRecorded`**；run 以 completed 结束且什么都没发出时撤回。
+- 出站表按"源消息 + 用途"做幂等，原来一条消息只能有一个表情，👀、撤回、收尾的 👍 会互相去重；幂等键对表情改为带上表情本身（`reaction:<text>`）。撤回用 `REACTION_CLEAR` 哨兵，sender 发 `setMessageReaction(chat, msg, [])`。
+- 阶段 B 的"文字确认"不再需要：确认用表情，一个请求仍只有一条文字答复，AGENTS.md §3.3 第 10 条不用改（D2 不触发）。

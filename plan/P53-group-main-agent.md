@@ -1,6 +1,6 @@
 # P53 主 agent「群里的 A2H」
 
-状态：待评审（2026-10-22 起草）；含需用户拍板的决定 D1–D4，拍板前不开工。负责人 claude。依赖：P52（研究员子 agent、单一出口、`stages/` 工厂）。范围 `packages/agent`（新主 agent 阶段、研究员 `asTool`、新发言工具与门）、`packages/domain`（出站 mention 渲染）、`apps/worker/src/pipeline/inbound.ts`（主 agent 接入、写前新鲜度检查）、`packages/eval`（"群里时刻"评测）。
+状态：实现中（2026-10-22 用户以 /goal 授权推进 P52–P55、生成额度 1000 万；D1–D4 按推荐执行）。负责人 claude。依赖：P52（研究员子 agent、单一出口、`stages/` 工厂）。范围 `packages/agent`（新主 agent 阶段、研究员 `asTool`、新发言工具与门）、`packages/domain`（出站 mention 渲染）、`apps/worker/src/pipeline/inbound.ts`（主 agent 接入、写前新鲜度检查）、`packages/eval`（"群里时刻"评测）。
 
 总体路线见 [P52](./P52-researcher-subagent-single-voice.md#总体路线p52p55)。
 
@@ -45,7 +45,7 @@ P51 之后可数指标 11/11 达标、判官 3.94，但盲判命中率仍 1.0。
 6. **开不开口集中到主 agent。** `ambiguous_unsolicited`、`canSkipSupplementReply`、研究员 `skip` 这些局部规则改为主 agent 数据包里的事实（"这条不是对你说的""你 3 分钟前刚回过这条线"），由主 agent 决定，代码只保留硬约束（冷却、频控、Phase）。triage 的 `handledByMembers` 丢弃保留不动——它省掉了 248/340 次进 agent。
 7. **提示词。** 新阶段 `main`：trust + fact + delivery + 群协议（何时沉默、何时只接半句、何时点名、何时研究）+ voice。预算 ≤ 8000 字（与执行阶段相同），`pnpm prompt:audit` 加 `main`。群协议里不放可照抄的中文范例句（P51 教训）。
 
-## 需要用户拍板
+## 决定（2026-10-22 按推荐执行）
 
 - **D1 点名的身份边界。** 推荐 A：模型只见别名，渲染时换成 Telegram mention（不改 AGENTS.md §6，模型不接触显示名）。备选 B：群记录带显示名（改 §6，模型能自然地说"阿明"，但显示名进入模型输入与快照）。
 - **D2 允许 @ 一个没向 A2H 提问的成员。** 这是新的出站形态（现在只回复提问者）。推荐允许，条件是第 4 条的 `refer_member` 门；每个成员每天被 A2H 点名 ≤ 2 次（频控表新增一项）。
@@ -81,3 +81,16 @@ T2 判官标注走 OPENAIROUTER。T8 录制约 100 万生成 token；T9 联合�
 - **主 agent 把什么都变成接半句**：验收 2 给了上限 40%；`say_briefly` 不能出现在 `addressedToBot` 且有可答问题的消息上（门）。
 - **点名点错人或显得冒犯**：`refer_member` 门 + 每人每日 2 次；联合实测里专门看被点名一方（演员）的反应。
 - **时延上升**：主 agent 比 P52 多一次决定调用；研究员仍是大头。若中位数超 1.2 倍，把"明显要研究"的消息（triage `answer` + 有任务 + 直接问）由代码直接先跑研究再进主 agent。
+
+## 实现记录（2026-10-22）
+
+与原计划的出入（AGENTS.md §9.1）：
+
+- **研究员不用 `asTool`，用普通工具 `research` 在代码里跑（T1 退路）。** PoC（`scripts/poc/p53-agent-as-tool/run.mts`，替身模型）：嵌套 run 与外层共享同一个 ctx 对象、嵌套工具调用不进外层历史、输出取内层最后一条消息——都可用；但嵌套 run 撞 maxTurns 时 SDK 把错误包成一段工具输出文字交还外层，外层不知道研究被打断。本阶段需要"撞线就把已收集的交出去"、自己的 trace 和输入过滤器，所以 `tools/research.ts` 在工具内部用 `createResearcherAgent` 跑一次研究员。
+- **新鲜度检查不是"出站工具退回一次"，而是每次调模型前刷新。** 出站工具的 `toDraft` 在 needsApproval 和 execute 各跑一次，"只退回一次"的状态会让第二次直接放行。改为主 agent 的输入过滤器在每次模型调用前查"本 run 开始后入库的群消息与 A2H 在其他 run 发出的话"（按插入时间，不按 receivedAt，录制回放时不会把原轮次后面的话当成新消息），放进数据包 `newGroupLines`，提示词要求据此改为沉默或一句短接。
+- **`stay_silent` 沿用 `do_nothing` 名字**，避免改动它已有的沉默语义与测试。
+- **`myRecentLines` 不单列**：groupConversation 已含 A2H 在本群 6 小时内的话。`myOpenThreads` 不含"距今多久"：任务行没有时间戳列，用 status / answered 代替。
+- **refer_member 的 mention 不加新列**：回复提问者的消息（reply_to），`mention_user_id` 填被点名成员；每人每日 ≤2 次用 `countMentionsSince`（notification 类、按 mention 计，会把该成员自己收到的 say_briefly 也算进去，只会让点名更少）。
+- 主 agent 只在群聊、`answerRequests`、`GROUP_MAIN_AGENT=true`（默认）时启用；私聊与 `ambiguous` 仍走 P52 流程（D4）。审批恢复按快照里的 `isMainAgentRun` 重建主 agent。
+
+T2 的"群里时刻"评测落为 `pnpm humanness moves <源轮次> <录制轮次>`：判官看每一问之前 30 分钟的群友发言、这一问和 A2H 实际的动作（沉默 / 表情 / 半句 / 回答），给出理想动作与是否合适，统计合适率、"不该说却说"、"该答却沉默"。triage 丢弃的消息到不了主 agent，所以评测对象是进入流水线的问题。

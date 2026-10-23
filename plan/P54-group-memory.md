@@ -1,6 +1,6 @@
 # P54 群记忆：成员公开备注与后台整理
 
-状态：待评审（2026-10-22 起草）；新增个人数据字段，需用户按 AGENTS.md §6 批准 D1–D3 后开工。负责人 claude。依赖：P53（主 agent 与 `groupView`）。范围 `packages/db`（新表与迁移）、`packages/agent`（整理员 agent、`groupView.memberNotes`）、`packages/queue` 与 `apps/worker`（后台整理任务、保留期 cron）、`packages/eval`。
+状态：实现中（2026-10-22 用户以 /goal 授权推进 P52–P55；D1–D3 按推荐执行）。负责人 claude。依赖：P53（主 agent 与 `groupView`）。范围 `packages/db`（新表与迁移）、`packages/agent`（整理员 agent、`groupView.memberNotes`）、`packages/queue` 与 `apps/worker`（后台整理任务、保留期 cron）、`packages/eval`。
 
 总体路线见 [P52](./P52-researcher-subagent-single-voice.md#总体路线p52p55)。
 
@@ -20,7 +20,7 @@ P53 的群视图只覆盖最近 6 小时、20 行。群里真正有用的"谁有
 4. **peer_offer 不再只是丢弃。** triage 判 `peer_offer` 的消息仍不进 agent，但会触发该群的 `memory_consolidate`。
 5. **保留与删除路径（§6 要求写明）。** `expiresAt` 到期由现有 cron 删除（不是置空，整行删）；来源消息被 30 天 cron 置空时，同步删除引用它的备注；群停用时删除该群全部备注；成员私聊 A2H"忘掉我" / `/forget` 删除其在所有群的备注（D3）。日志与 trace 只记备注 id 与 kind，不记 text（pino redact 加 `note.text`）。
 
-## 需要用户拍板
+## 决定（2026-10-22 按推荐执行）
 
 - **D1 是否引入 `member_notes`。** 这是 AGENTS.md §6 意义上的新增个人数据字段：内容只来自群内公开发言、30 天到期、整行删除。推荐引入。
 - **D2 整理的触发方式。** 推荐按群 10 分钟去抖；备选：每日一次（成本更低，但当天的供给当天用不上）。
@@ -47,3 +47,11 @@ P53 的群视图只覆盖最近 6 小时、20 行。群里真正有用的"谁有
 ## 额度
 
 整理员按群去抖，第七轮规模（约 350 条群消息 / 8 章）估计 40–60 次调用、每次 3–5k token，合计 ≤ 30 万；T6 离线回放同量级。开跑前报数。
+
+## 实现记录（2026-10-22）
+
+- 迁移 `20261023041204_member_notes`：枚举 `MemberNoteKind`、表 `member_notes`（外键对 groups / users / messages 均 `ON DELETE CASCADE`）、`groups.memory_consolidated_at`。`supersededById` 简化为 `supersededAt`。
+- **触发改为 cron，不新开队列**：`consolidate_member_notes` 每 10 分钟一次，`groups.pendingMemory` 找出"上次整理后有新消息"的活跃群，每次最多 5 个群；效果与"按群 10 分钟去抖"相同（D2），少一条队列与载荷 schema。
+- 整理员 `stages/notetaker.ts`：只给模型别名与行号；代码门——来源行必须是同一成员在本群的公开消息（仓储层再校验一次）、备注与来源行必须有词重叠、命中电话 / 邮箱 / @handle / 完整邮编 / 门牌号即丢弃。trace 只记条数，不记备注文字。
+- 删除路径：`delete_member_notes` cron（到期、来源消息已被 30 天 cron 置空）；`groups.setPolicy(isActive=false)` 联删；私聊 `/forget`（在代码门之前处理，删除该成员在所有群的备注，只写 trace，不回消息——发确认需要新的出站形态，留作后续）。
+- 主 agent 的 `groupView.memberNotes`：提问者自己的备注优先，再取与当前话题有词重叠的其他成员备注，≤8 条、≤1200 字，数据包里只有别名；`refer_member` 可以点名只在备注里出现的成员。

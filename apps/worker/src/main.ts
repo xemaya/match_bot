@@ -2,6 +2,7 @@ import { disconnectPrisma } from '@matchbot/db';
 import { AGENT_VERSION } from '@matchbot/agent';
 import type { InboundMessage } from '@matchbot/domain';
 import { QUEUE_NAMES, closeQueues, createQueues, createWorker } from '@matchbot/queue';
+import { consolidateGroupMemory } from '@matchbot/agent';
 import { runCronJob, scheduleCron } from './cron.js';
 import { buildDeps } from './deps.js';
 import { processInbound } from './pipeline/inbound.js';
@@ -28,7 +29,7 @@ const workers = [
     },
   ),
   createWorker(QUEUE_NAMES.cron, d.env.REDIS_URL, (_data, jobName) =>
-    runCronJob(jobName, d.repos, d.logger),
+    runCronJob(jobName, d.repos, d.logger, (p) => consolidateGroupMemory(d, p)),
   ),
 ];
 

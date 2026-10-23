@@ -58,6 +58,12 @@
   "ambiguousTopics": [],
   "validationFeedback": null,
   "research": {
+    "budget": {
+      "turn": 1,
+      "turnsLeft": 5,
+      "inputCharsLeft": 100000,
+      "finishNow": false
+    },
     "marketSearches": 0,
     "marketListingsFound": 0,
     "marketDetailsRead": 0,
