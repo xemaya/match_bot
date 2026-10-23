@@ -38,12 +38,12 @@
 ## 任务清单
 
 - [x] T1 基线（2026-10-22，结果见文末"基线"）：`pnpm humanness export --since … --until …` 导出第七轮实发回复为 `r7`，`metrics` + `judge`；从 decision_traces 统计 r3-rec 与 r7 两轮的研究指标（见验收 1）写进本文件，作为基线表。不花生成 token（判官走 OPENAIROUTER）。
-- [ ] T2 测量：在执行阶段 trace 里按轮记录 `packetChars`（运行时数据包）、`historyChars`（SDK 历史）、`toolOutputChars`（本轮工具输出），用 r3 的一个市场案例 `humanness:record --only` 跑一次，确认预算是被哪一块吃掉的。结论回写本文件"改法 5"。
+- [x] T2 测量：在执行阶段 trace 里按轮记录 `packetChars`（运行时数据包）、`historyChars`（SDK 历史）、`toolOutputChars`（本轮工具输出），用 r3 的一个市场案例 `humanness:record --only` 跑一次，确认预算是被哪一块吃掉的。结论回写本文件"改法 5"。
 - [x] T3 `stages/` 四个工厂，`run.ts`、`task-preparation.ts` 改调；行为不变（这一步所有既有测试应原样通过，`saveExecutionCheckpoint` 的逐步检查点照旧）。单独提交。
-- [ ] T4 研究员：去 voice / delivery 层、去出站工具、新增 `finish_research`（zod 参数、refs 服务端校验、trace）；`toolUseBehavior` 以 `finish_research` 为唯一终点；预算撞线转 `deliver`。
-- [ ] T5 写手：按场景挂一个回复工具；证据简报补 xhs 与目录证据（`find_suppliers` 的结果现在不进 ctx，只有 `supplierSearchEmpty`；要新增 `ctx.catalogueSuppliers` 交给写手，`reply_in_group` 仍按库内 id 校验）；研究备忘进数据包；`skip` / `no_answer` / `ask_user` 与不需研究的情况的代码分流。
-- [ ] T6 研究员工作视图与工具输出摘要（按 T2 结论）。
-- [ ] T7 测试：stub `ModelProvider` 覆盖——研究员调不到任何出站工具（工具集断言）；四种 outcome 的分流；预算撞线进入写手；每个出站工具 Phase 0 / 1 / 2 四条用例仍在写手阶段成立。`pnpm prompt:audit` 预算内并重生成 `docs/prompts/`。
+- [x] T4 研究员：去 voice / delivery 层、去出站工具、新增 `finish_research`（zod 参数、refs 服务端校验、trace）；`toolUseBehavior` 以 `finish_research` 为唯一终点；预算撞线转 `deliver`。
+- [x] T5 写手：按场景挂一个回复工具；证据简报补 xhs 与目录证据（`find_suppliers` 的结果现在不进 ctx，只有 `supplierSearchEmpty`；要新增 `ctx.catalogueSuppliers` 交给写手，`reply_in_group` 仍按库内 id 校验）；研究备忘进数据包；`skip` / `no_answer` / `ask_user` 与不需研究的情况的代码分流。
+- [x] T6 研究员工作视图与工具输出摘要（按 T2 结论）。
+- [x] T7 测试：stub `ModelProvider` 覆盖——研究员调不到任何出站工具（工具集断言）；四种 outcome 的分流；预算撞线进入写手；每个出站工具 Phase 0 / 1 / 2 四条用例仍在写手阶段成立。`pnpm prompt:audit` 预算内并重生成 `docs/prompts/`。
 - [ ] T8 回路：`humanness:record r3 --as r3-p52` 与 `humanness:record r7 --as r7-p52 --only <挑 12 条>`（真实模型与搜索，见额度），`metrics` / `judge` / `compare`；`replay r3-p52 --n 3` 看写手；记录进本文件。
 - [ ] T9 `docs/技术架构设计.md` §4.2 改写为阶段表（谁读什么层、有哪些工具、终点是什么）；AGENT_VERSION 0.36.0；清空待审 `run_states`（工具集变了，旧快照恢复会失败）；`pnpm eval`；`pnpm build && pnpm check`；完成记录。
 
@@ -94,3 +94,17 @@ r7 没达标的项：超过 100 字 4 条、£ 2、检索汇报词 1、语气词
 读法：实发比回放低半分多。一部分是版本（第七轮跑的是 0.35.0 前后的工作树，P51 收尾的 0.35.1 改动不在里面），一部分是回放只重跑收尾阶段——实发里 9/27 条出站是研究阶段直接写的，回放覆盖不到。这正是本包"单一出口"要消除的差别：之后回放测到的写手就是实发唯一的作者。
 
 研究指标基线见"为什么"一节的表（实发与录制分列）。
+
+## T2 测量（2026-10-22）
+
+`execution_input` trace（每轮数据包 / 历史 / 工具输出字符），三个 r3 案例各录一次（`humanness:record r3 --only`，约 18 万生成 token）：
+
+| 案例 | 场景 | 轮 | 数据包（每轮） | 历史（每轮） | 其中工具输出 | 累计 |
+| --- | --- | ---: | --- | --- | --- | ---: |
+| 打印机 | marketplace | 4 | 3.2k → 6.3k | 0.1k → 31.6k | 0 → 28.4k | 95k |
+| half term 室内去处 | information | 4 | 7.1k → 18.9k | 0.1k → 10.4k | 0 → 8.2k | 83k |
+| Epping Forest | information | 4 | 3.9k → 16.5k | 0.1k → 9.6k | 0 → 7.6k | 71k |
+
+结论：市场场景是工具输出在历史里累积（`market_search` / `market_enrich` 每次列 8–10 条带摘录的候选，后一次又全列一遍）；信息场景是证据进了数据包后每轮重发，同一批来源的预览又在工具输出里重复一次。两者都离 10 万字累计上限只差一两轮。
+
+改法 5 的落地：`compactEarlierToolResults`（`prompts/runtime-context.ts`）——执行阶段每次调模型前，把**已经读过的**（不是最新一条）证据类工具结果（search_information、read_web_page、market_search、market_enrich、read_task_sources、xhs_*）中超过 600 字的替换成一行占位，来源与候选仍按编号留在数据包里；账本类反馈（record_task_progress 等）原样保留。另外研究员去掉 voice / delivery 层后，执行阶段提示词从约 7980 字降到约 5000 字（`docs/prompts/README.md`）。

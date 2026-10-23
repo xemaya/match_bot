@@ -68,6 +68,10 @@ export interface MatchContext {
   pageLinks?: Array<{ text: string; url: string }>;
   sourceFailures?: string[];
   answerRecorded?: boolean;
+  /** P52: how the researcher ended (finish_research, or deliver/ask_user via record_task_progress). */
+  researchOutcome?: 'deliver' | 'no_answer' | 'skip';
+  /** P52: the researcher's note for the writer (≤200 chars); never sent to the group. */
+  researchNote?: string;
   /** Server-bound same-task context addition after a delivered answer; not a general silent-mode permission. */
   quietSupplementTaskId?: string;
   quietSupplementEvidenceIds?: string[];
@@ -79,6 +83,16 @@ export interface MatchContext {
   demandId?: string;
   demand?: DemandDraft;
   recentReplies: string[];
+  /** P52: find_suppliers results for the writer's reply_in_group (the researcher no longer replies). */
+  catalogueSuppliers?: Array<{
+    id: string;
+    name?: string | undefined;
+    price?: string | null | undefined;
+    phone?: string | null | undefined;
+    whatsapp?: string | null | undefined;
+    pool?: string | undefined;
+    reasons: string[];
+  }>;
   /** find_suppliers 本次 run 是否查过且为空；web_search 的前置条件之一（P14）。 */
   supplierSearchEmpty?: boolean;
   /**

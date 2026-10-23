@@ -19,6 +19,8 @@ import { createStatusAgent } from './stages/status.js';
 import { createWriterAgent } from './stages/writer.js';
 import type { AgentDeps, MatchContext } from './context.js';
 import { createPgSession } from './session.js';
+import { executionInputStats } from './prompts/runtime-context.js';
+import { needsNoResearch } from './prompts/tool-contract.js';
 import { restoreSearchContext } from './restore-search-context.js';
 import { prepareTaskTurn } from './task-preparation.js';
 import { refreshTaskSourceMemory } from './task-source-refresh.js';
@@ -182,7 +184,8 @@ export async function runInbound(p: {
     phase: p.ctx.phase,
     input: p.ctx.currentRequest?.text ?? p.input,
     checkpointInput: p.input,
-    finalAnswerOnly: ambiguous,
+    // P52: acknowledgements, unsupported asks and ambiguous binding go straight to the writer.
+    finalAnswerOnly: ambiguous || (!!p.deps.answerRequests && needsNoResearch(p.deps, p.ctx)),
     inputRef: p.ctx.sourceMessageId,
     requestContext: p.ctx,
     ...(p.ctx.task ? { taskId: p.ctx.task.id } : {}),
@@ -201,9 +204,11 @@ export async function runInbound(p: {
       ...RUN_OPTIONS,
       signal: researchSignal,
     });
+    await traceExecutionInput(p);
   } catch (error) {
     if (!p.deps.answerRequests || !(error instanceof Error) || /Guardrail/.test(error.name))
       throw error;
+    await traceExecutionInput(p, error.name);
     p.ctx.sourceFailures ??= [];
     p.ctx.sourceFailures.push('processing:' + error.name);
     await p.deps.repos.traces.create({
@@ -242,6 +247,7 @@ export async function runInbound(p: {
     !p.ctx.outboundBlocked &&
     !p.ctx.answerInputExhausted &&
     p.ctx.task?.nextStep?.action !== 'ask_user' &&
+    p.ctx.researchOutcome !== 'skip' &&
     pendingResearchConditions(p.ctx).length &&
     (p.deps.marketSearch || p.deps.webSearch?.research)
   ) {
@@ -286,18 +292,53 @@ export async function runInbound(p: {
     p.ctx.sourceFailures.push('processing:invalid_tool_input');
     return finalizeRequest(p, session);
   }
+  if (p.deps.answerRequests && !result.interruptions.length && (await routeResearchOutcome(p)))
+    return { kind: 'completed', toolsCalled: [] };
   if (
     p.deps.answerRequests &&
     !result.interruptions.length &&
     !p.ctx.answerRecorded &&
     !p.ctx.replySuppressed &&
-    p.ctx.currentRequest?.isActionable &&
-    p.ctx.currentRequest.demand.category !== 'job'
+    (p.ctx.currentRequest?.isActionable || p.ctx.researchOutcome !== undefined) &&
+    p.ctx.currentRequest?.demand.category !== 'job'
   )
     return canSkipSupplementReply(p.ctx) || p.ctx.outboundBlocked || p.ctx.answerInputExhausted
       ? respondRequestStatus(p, session)
       : finalizeRequest(p, session);
   return settle(p.deps, p.ctx, result);
+}
+
+/**
+ * P52: whether to speak after research is decided here, not in the researcher's prompt. A skip, or
+ * nothing found for a message that did not address A2H, ends silently; true means handled.
+ */
+async function routeResearchOutcome(p: { deps: AgentDeps; ctx: MatchContext }): Promise<boolean> {
+  const outcome = p.ctx.researchOutcome;
+  const silent = outcome === 'skip' || (outcome === 'no_answer' && isUnsolicitedGroupTurn(p.ctx));
+  if (!silent || p.ctx.answerRecorded) return false;
+  p.ctx.replySuppressed = true;
+  await p.deps.repos.traces.create({
+    kind: 'gate',
+    inputRef: p.ctx.sourceMessageId,
+    phase: p.ctx.phase,
+    latencyMs: 0,
+    costMicro: 0,
+    output: { gate: 'research_route', decision: 'silent', outcome },
+  });
+  return true;
+}
+
+/** How the research input was spent: packet vs history vs tool outputs, per turn (P52 T2). */
+async function traceExecutionInput(p: { deps: AgentDeps; ctx: MatchContext }, stop?: string) {
+  if (!p.deps.answerRequests) return;
+  await p.deps.repos.traces.create({
+    kind: 'gate',
+    inputRef: p.ctx.sourceMessageId,
+    phase: p.ctx.phase,
+    latencyMs: 0,
+    costMicro: 0,
+    output: { gate: 'execution_input', ...executionInputStats(p.ctx), ...(stop ? { stop } : {}) },
+  });
 }
 
 function hasValidArguments(raw: string | undefined): boolean {

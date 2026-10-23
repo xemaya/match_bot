@@ -85,6 +85,22 @@ export const EXECUTION_INPUT_CHARS = 80000;
  */
 export const EXECUTION_RUN_INPUT_CHARS = 100000;
 const executionInputUsed = new WeakMap<object, number>();
+/** Per-turn split of the execution input, read back once per run for the research trace (P52 T2). */
+const executionInputTurns = new WeakMap<
+  object,
+  Array<{ packetChars: number; historyChars: number; toolOutputChars: number }>
+>();
+
+export function executionInputStats(ctx: MatchContext) {
+  const turns = executionInputTurns.get(ctx) ?? [];
+  return {
+    turns: turns.length,
+    usedChars: executionInputUsed.get(ctx) ?? 0,
+    packetChars: turns.map((t) => t.packetChars),
+    historyChars: turns.map((t) => t.historyChars),
+    toolOutputChars: turns.map((t) => t.toolOutputChars),
+  };
+}
 
 /** Envelope structure is trusted, text inside it is not. Never include other owners/scopes. */
 export function runtimeContext(ctx: MatchContext, stage: PromptStage): Record<string, unknown> {
@@ -136,6 +152,9 @@ export function runtimeContext(ctx: MatchContext, stage: PromptStage): Record<st
     groupConversation: ctx.groupTranscript ?? [],
     ...(stage === 'finalization'
       ? {
+          // P52: the researcher's writer-only note and the catalogue providers it found.
+          researchNote: ctx.researchNote ?? null,
+          ...(ctx.catalogueSuppliers?.length ? { catalogueSuppliers: ctx.catalogueSuppliers } : {}),
           deliveryContract: {
             referenceFamilies: ['k', 'm'],
             unresearchedConditions: delivery?.unresearchedConditions ?? [],
@@ -194,14 +213,59 @@ export function runtimeContext(ctx: MatchContext, stage: PromptStage): Record<st
   };
 }
 
+/** Evidence tools whose results also live in the runtime packet (or are re-readable by ref). */
+const COMPACTED_TOOLS = new Set([
+  'search_information',
+  'read_web_page',
+  'market_search',
+  'market_enrich',
+  'read_task_sources',
+  'xhs_search',
+  'xhs_read_notes',
+]);
+const COMPACT_ABOVE_CHARS = 600;
+
+/**
+ * P52 T2 (2026-10-22): research input grew with every turn because each earlier evidence-tool
+ * result stayed in the history while the same sources were also in the packet — a marketplace run
+ * reached 28k chars of tool output by turn four. Once the model has read a result (it is not the
+ * latest one), only a stub stays; the sources and listings remain in the packet by ref.
+ */
+export function compactEarlierToolResults(input: AgentInputItem[]): AgentInputItem[] {
+  const last = input.map((i) => i.type).lastIndexOf('function_call_result');
+  return input.map((item, index) => {
+    if (item.type !== 'function_call_result' || index === last) return item;
+    const name = (item as { name?: string }).name ?? '';
+    if (!COMPACTED_TOOLS.has(name) || JSON.stringify(item.output).length <= COMPACT_ABOVE_CHARS)
+      return item;
+    return {
+      ...item,
+      output: {
+        type: 'text',
+        text: `[earlier ${name} result, already read; its sources/listings are in the runtime packet by ref]`,
+      },
+    } as AgentInputItem;
+  });
+}
+
 /** SDK filter adds a fresh low-priority data packet before each call, without rewriting original input. */
 export function contextInputFilter(stage: PromptStage): CallModelInputFilter {
   return ({ modelData, context }): ModelInputData => {
     if (!context || stage === 'status') return modelData;
     const data = JSON.stringify(runtimeContext(context as MatchContext, stage));
     if (data.length > 64000) throw new PromptContextBudgetError();
+    const input =
+      stage === 'execution' ? compactEarlierToolResults(modelData.input) : modelData.input;
     if (stage === 'execution') {
-      const turnChars = data.length + JSON.stringify(modelData.input).length;
+      const history = input.filter((i) => !isRuntimeContextItem(i));
+      const historyChars = JSON.stringify(history).length;
+      const toolOutputChars = JSON.stringify(
+        history.filter((i) => i.type === 'function_call_result'),
+      ).length;
+      const turns = executionInputTurns.get(context) ?? [];
+      turns.push({ packetChars: data.length, historyChars, toolOutputChars });
+      executionInputTurns.set(context, turns);
+      const turnChars = data.length + JSON.stringify(input).length;
       if (turnChars > EXECUTION_INPUT_CHARS)
         throw new PromptContextBudgetError('execution input exceeds the per-turn budget');
       const used = (executionInputUsed.get(context) ?? 0) + turnChars;
@@ -222,7 +286,7 @@ export function contextInputFilter(stage: PromptStage): CallModelInputFilter {
     };
     return {
       ...modelData,
-      input: [packet, ...modelData.input.filter((i) => !isRuntimeContextItem(i))],
+      input: [packet, ...input.filter((i) => !isRuntimeContextItem(i))],
     };
   };
 }

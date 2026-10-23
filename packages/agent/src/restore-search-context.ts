@@ -60,6 +60,8 @@ export const researchContextSchema = z.object({
     .max(160)
     .optional(),
   sourceFailures: z.array(z.string()).optional(),
+  researchOutcome: z.enum(['deliver', 'no_answer', 'skip']).optional(),
+  researchNote: z.string().max(200).optional(),
   rateLimitPerDay: z.number().int().nonnegative().optional(),
   xhsNotes: z
     .array(
@@ -174,6 +176,8 @@ export function restoreSearchContext(ctx: MatchContext, snapshot: string): Match
     ...(saved.pageReads ? { pageReads: saved.pageReads } : {}),
     ...(saved.pageLinks ? { pageLinks: saved.pageLinks } : {}),
     ...(saved.sourceFailures ? { sourceFailures: saved.sourceFailures } : {}),
+    ...(saved.researchOutcome ? { researchOutcome: saved.researchOutcome } : {}),
+    ...(saved.researchNote ? { researchNote: saved.researchNote } : {}),
     ...(saved.xhsNotes
       ? {
           xhsNotes: saved.xhsNotes.map(({ isDetailLoaded, ...note }) => ({

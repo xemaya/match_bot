@@ -5,6 +5,7 @@ import { canHandOffToDelivery } from '../delivery-context.js';
 import { noGuaranteeOutputGuardrail, sensitiveInputGuardrail } from '../guardrails.js';
 import { researchInstructions } from '../prompts/stages/research.js';
 import { executionToolNames, validateToolContract } from '../prompts/tool-contract.js';
+import { finishResearchTool } from '../tools/finish-research.js';
 import { executionTools } from './execution-tools.js';
 import {
   checkpointStep,
@@ -32,9 +33,9 @@ function recordedProgress(results: ToolResults): boolean {
 }
 
 /**
- * Execution: scene workflow plus research tools, narrowed to the scene contract. The default
- * run_llm_again lets it chain record → search → read → reply; write tools are idempotent and every
- * outbound goes through the gate and rate limits.
+ * Execution (P52): scene research tools narrowed to the scene contract, never an outbound tool. The
+ * default run_llm_again lets it chain record → search → read → record; it ends with
+ * finish_research or a record_task_progress hand-off, and the writer alone replies.
  */
 export function createResearcherAgent(deps: AgentDeps, run?: StageRun) {
   const promptContext = run?.context;
@@ -46,8 +47,18 @@ export function createResearcherAgent(deps: AgentDeps, run?: StageRun) {
     toolUseBehavior: async (rc, results) => {
       const ctx = rc.context as MatchContext;
       await checkpointStep(deps, ctx, run);
-      if (deps.taskRequests && canHandOffToDelivery(ctx) && recordedProgress(results))
+      if (deps.taskRequests && canHandOffToDelivery(ctx) && recordedProgress(results)) {
+        ctx.researchOutcome = 'deliver';
         return final('research ready for delivery');
+      }
+      const finished = results.find(
+        (r) =>
+          r.tool.name === 'finish_research' &&
+          'output' in r &&
+          typeof r.output === 'string' &&
+          r.output.startsWith('ok: research finished'),
+      );
+      if (finished && 'output' in finished) return final(String(finished.output));
       return finishOnOutbound(ctx, results, outboundToolNames(deps), { stopWhenBlocked: true });
     },
     resetToolChoice: true,
@@ -56,7 +67,7 @@ export function createResearcherAgent(deps: AgentDeps, run?: StageRun) {
       required: !!(deps.xhsSearch && deps.env.XHS_RESEARCH_ENABLED),
     }),
     instructions: (rc) => researchInstructions(deps, rc.context, false, londonToday()),
-    tools: executionTools(deps, run?.input),
+    tools: [...executionTools(deps, run?.input), finishResearchTool(deps)],
     inputGuardrails: [sensitiveInputGuardrail],
     outputGuardrails: [noGuaranteeOutputGuardrail],
   });

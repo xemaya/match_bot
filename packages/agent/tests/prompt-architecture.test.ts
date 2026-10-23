@@ -60,14 +60,14 @@ it.each([
   [
     'man_and_van',
     '安排搬家',
-    ['record_request', 'find_suppliers', 'reply_in_group'],
-    ['market_search', 'xhs_search'],
+    ['record_request', 'find_suppliers', 'finish_research'],
+    ['market_search', 'xhs_search', 'reply_in_group', 'reply_to_request'],
   ],
   ['housing', '找一居室', ['market_search', 'market_enrich'], ['find_suppliers', 'xhs_search']],
   ['other', '想找周末球友', ['market_search'], ['xhs_search', 'find_suppliers']],
   ['other', '办理 GP registration', ['search_information'], ['market_search', 'xhs_search']],
   ['other', '附近买生活用品', ['search_information'], ['market_search', 'xhs_search']],
-  ['job', '找工作', ['do_nothing'], ['search_information', 'market_search', 'find_suppliers']],
+  ['job', '找工作', ['finish_research'], ['search_information', 'market_search', 'do_nothing']],
 ] as const)(
   'loads independent scene contracts for %s / %s',
   async (category, text, allowed, denied) => {
@@ -99,8 +99,9 @@ it('does not advertise unavailable search capabilities or keep research tools af
     'Marketplace research is unavailable',
   );
   ctx.taskUpdate = { kind: 'acknowledged' };
-  const ended = createMatchAgent(deps, { phase: 2, context: ctx }).agent;
-  expect(ended.tools.map((t) => (t.type === 'function' ? t.name : ''))).toEqual([
+  // P52: an acknowledgement goes straight to the writer, which only gets react / do_nothing.
+  const ended = createMatchAgent(deps, { phase: 2, context: ctx, finalAnswerOnly: true }).agent;
+  expect(ended.tools.map((t) => (t.type === 'function' ? t.name : '')).sort()).toEqual([
     'do_nothing',
     'react',
   ]);

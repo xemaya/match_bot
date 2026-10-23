@@ -167,7 +167,7 @@ describe('execution research checkpoints', () => {
   it('awaits the SDK tool-use behavior checkpoint before asking for the next model turn', async () => {
     const f = fixture(),
       model = new ScriptedModel([
-        [functionCall('do_nothing', { reason: 'fixture' }, { callId: 'one' })],
+        [functionCall('finish_research', { outcome: 'skip', note: '' }, { callId: 'one' })],
         [assistantMessage('done')],
       ]);
     let release: (() => void) | undefined;
@@ -186,7 +186,7 @@ describe('execution research checkpoints', () => {
       demand: { category: 'second_hand', confidence: 1 },
       isActionable: true,
     };
-    // A direct ask: do_nothing is pushed back for an answer, so a second model turn follows.
+    // A direct ask cannot be skipped, so the refusal goes back and a second model turn follows.
     f.ctx.addressedToBot = true;
     const pending = runner.run(agent, '找书桌', { context: f.ctx, maxTurns: 3 });
     for (let attempt = 0; attempt < 50 && !release; attempt++)

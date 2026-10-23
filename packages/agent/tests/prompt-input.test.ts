@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { taskSchema } from '@matchbot/domain';
 import type { MatchContext } from '../src/context.js';
 import {
+  compactEarlierToolResults,
   contextInputFilter,
   isRuntimeContextItem,
   runtimeContext,
@@ -240,9 +241,10 @@ it('stops an execution turn whose whole model input exceeds the per-turn budget'
     context: ctx,
   } as never);
   expect(JSON.stringify(small.input)).toContain('matchbot_runtime_context');
+  // A ledger tool: its results are never compacted, so the history really is this large.
   const history = Array.from({ length: 60 }, (_, i) => ({
     type: 'function_call_result',
-    name: 'market_search',
+    name: 'record_task_progress',
     callId: 'c' + i,
     status: 'completed',
     output: { type: 'text', text: 'x'.repeat(1500) },
@@ -263,7 +265,7 @@ it('stops a message whose execution turns together exceed the per-message input 
   const ctx = context();
   const turn = Array.from({ length: 20 }, (_, i) => ({
     type: 'function_call_result',
-    name: 'market_search',
+    name: 'record_task_progress',
     callId: 'r' + i,
     status: 'completed',
     output: { type: 'text', text: 'y'.repeat(1500) },
@@ -279,4 +281,26 @@ it('stops a message whose execution turns together exceed the per-message input 
   expect(() =>
     filter({ modelData: { input: turn, instructions: '' } as never, context: context() } as never),
   ).not.toThrow();
+});
+
+it('compacts earlier evidence-tool results once read, keeping the latest one whole', () => {
+  const result = (name: string, i: number, chars: number) => ({
+    type: 'function_call_result',
+    name,
+    callId: 'k' + i,
+    status: 'completed',
+    output: { type: 'text', text: 'z'.repeat(chars) },
+  });
+  const input = [
+    result('market_search', 0, 5000),
+    result('record_task_progress', 1, 5000),
+    result('search_information', 2, 300),
+    result('market_enrich', 3, 5000),
+  ];
+  const out = compactEarlierToolResults(input as never) as unknown as typeof input;
+  expect(JSON.stringify(out[0]!.output)).toContain('earlier market_search result');
+  // Ledger feedback and short results stay as they were; the latest result is never compacted.
+  expect(out[1]).toEqual(input[1]);
+  expect(out[2]).toEqual(input[2]);
+  expect(out[3]).toEqual(input[3]);
 });

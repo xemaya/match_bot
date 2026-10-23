@@ -116,6 +116,7 @@
       "text": "去Boots吧"
     }
   ],
+  "researchNote": null,
   "deliveryContract": {
     "referenceFamilies": [
       "k",

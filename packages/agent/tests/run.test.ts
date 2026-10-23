@@ -2,7 +2,8 @@ import { DEFAULT_THRESHOLDS } from '@matchbot/gating';
 import { createLogger, loadEnv } from '@matchbot/shared';
 import { assistantMessage, functionCall, ScriptedModel } from '@openai/agents/testing';
 import { describe, expect, it, vi } from 'vitest';
-import { AGENT_VERSION } from '../src/agent.js';
+import { AGENT_VERSION, createMatchAgent } from '../src/agent.js';
+import { WRITER_REPLY_TOOLS } from '../src/prompts/tool-contract.js';
 import { resumeRun, runInbound } from '../src/run.js';
 import { taskSchema, reviseTaskRequirements, recordTaskProgress } from '@matchbot/domain';
 
@@ -159,12 +160,11 @@ describe('runInbound', () => {
       ],
       [
         functionCall(
-          'do_nothing',
-          { reason: 'context only, previous useful routes unchanged' },
+          'finish_research',
+          { outcome: 'skip', note: 'context only, previous useful routes unchanged' },
           { callId: 'quiet' },
         ),
       ],
-      [assistantMessage('done')],
     ]);
     const { deps, repos } = makeDeps(model);
     const existing = medicineTask();
@@ -192,7 +192,7 @@ describe('runInbound', () => {
     expect(repos.outbound.create).not.toHaveBeenCalled();
     expect(deps.evaluateOutbound).not.toHaveBeenCalled();
     expect(
-      repos.traces.create.mock.calls.some((c) => JSON.stringify(c).includes('agent_noop')),
+      repos.traces.create.mock.calls.some((c) => JSON.stringify(c).includes('research_route')),
     ).toBe(true);
   });
   it('stays silent when an ambiguous follow-up did not address the bot', async () => {
@@ -499,6 +499,13 @@ describe('runInbound', () => {
     const model = new ScriptedModel([
       [
         functionCall(
+          'finish_research',
+          { outcome: 'deliver', note: '' },
+          { callId: 'done-research' },
+        ),
+      ],
+      [
+        functionCall(
           'reply_to_request',
           {
             kind: 'clarification',
@@ -586,6 +593,13 @@ describe('runInbound', () => {
       ],
       [
         functionCall(
+          'finish_research',
+          { outcome: 'deliver', note: '' },
+          { callId: 'done-research' },
+        ),
+      ],
+      [
+        functionCall(
           'reply_to_request',
           {
             kind: 'answer',
@@ -647,8 +661,7 @@ describe('runInbound', () => {
     'finalizes an unblocked request through SDK approval semantics, phase %s',
     async (phase) => {
       const model = new ScriptedModel([
-        [functionCall('do_nothing', { reason: 'no exact match' }, { callId: 'noop' })],
-        [assistantMessage('done')],
+        [functionCall('finish_research', { outcome: 'no_answer', note: '' }, { callId: 'noop' })],
         [
           functionCall(
             'reply_to_request',
@@ -678,6 +691,13 @@ describe('runInbound', () => {
     };
     const model = new ScriptedModel([
       [bad],
+      [
+        functionCall(
+          'finish_research',
+          { outcome: 'no_answer', note: '' },
+          { callId: 'done-research' },
+        ),
+      ],
       [
         functionCall(
           'reply_to_request',
@@ -1525,6 +1545,7 @@ describe('runInbound', () => {
 describe('request status after recommendation decline', () => {
   it('posts a fixed next step once without rewriting the rejected answer', async () => {
     const model = new ScriptedModel([
+      [functionCall('finish_research', { outcome: 'no_answer', note: '' }, { callId: 'fin' })],
       [
         functionCall(
           'reply_to_request',
@@ -1596,8 +1617,13 @@ it.each([false, true])(
   'repairs unsupported final delivery numbers even after an early stop: %s',
   async (stopsEarly) => {
     const model = new ScriptedModel([
-      [functionCall('do_nothing', { reason: 'research done' }, { callId: 'research-done' })],
-      [assistantMessage('done')],
+      [
+        functionCall(
+          'finish_research',
+          { outcome: 'deliver', note: '' },
+          { callId: 'research-done' },
+        ),
+      ],
       [
         functionCall(
           'reply_to_request',
@@ -1636,7 +1662,8 @@ it.each([false, true])(
 it('uses bounded finalization after the research turn budget instead of dropping collected work', async () => {
   const model = new ScriptedModel([
     ...Array.from({ length: 8 }, (_, i) => [
-      functionCall('do_nothing', { reason: 'still deciding' }, { callId: 'noop-' + i }),
+      // A direct ask cannot be skipped: each refused skip spends a research turn.
+      functionCall('finish_research', { outcome: 'skip', note: '' }, { callId: 'noop-' + i }),
     ]),
     [
       functionCall(
@@ -1677,7 +1704,7 @@ it.each(['react', 'do_nothing'])('ends acknowledgement immediately after %s', as
   expect(model.calls).toHaveLength(1);
 });
 
-it('new wireless requirement cannot finish through a direct reply or a natural-language stop before fresh research', async () => {
+it('new wireless requirement cannot finish through a premature finish before fresh research', async () => {
   const task = taskSchema.parse({
     id: 'printer',
     ownerUserId: 'u1',
@@ -1732,14 +1759,7 @@ it('new wireless requirement cannot finish through a direct reply or a natural-l
         { callId: 'plan-wifi' },
       ),
     ],
-    [
-      functionCall(
-        'reply_to_request',
-        { kind: 'no_match', text: '原帖没有写无线，暂时不能确认。', refs: [] },
-        { callId: 'premature' },
-      ),
-    ],
-    [assistantMessage('finished')],
+    [functionCall('finish_research', { outcome: 'deliver', note: '' }, { callId: 'premature' })],
     [
       functionCall(
         'search_information',
@@ -1799,4 +1819,80 @@ it('new wireless requirement cannot finish through a direct reply or a natural-l
     }),
   );
   model.assertComplete();
+});
+
+describe('P52 researcher hand-off', () => {
+  it.each([
+    ['second_hand', '找台灯'],
+    ['man_and_van', '安排搬家'],
+    ['other', '周末带娃去哪玩 博物馆'],
+    ['other', '办理 GP registration'],
+    ['job', '找工作'],
+  ] as const)('never registers an outbound tool on the researcher (%s / %s)', (category, text) => {
+    const { deps } = makeDeps(new ScriptedModel([]));
+    const context = {
+      ...ctx(2),
+      currentRequest: { text, demand: { category, confidence: 1 }, isActionable: true },
+    };
+    const { agent } = createMatchAgent(
+      {
+        ...deps,
+        answerRequests: true,
+        taskRequests: true,
+        marketSearch: { find: vi.fn(), detail: vi.fn() },
+        webSearch: { find: vi.fn(), research: vi.fn() },
+        xhsSearch: { search: vi.fn(), readNote: vi.fn() },
+        pageReader: { read: vi.fn() },
+      } as never,
+      { phase: 2, context: context },
+    );
+    const names = agent.tools.map((t) => (t.type === 'function' ? t.name : ''));
+    expect(names).toContain('finish_research');
+    for (const reply of WRITER_REPLY_TOOLS) expect(names).not.toContain(reply);
+  });
+  it.each(['skip', 'no_answer'] as const)(
+    'ends an overheard group turn silently after %s',
+    async (outcome) => {
+      const model = new ScriptedModel([
+        [functionCall('finish_research', { outcome, note: '' }, { callId: 'fin' })],
+      ]);
+      const { deps, repos } = makeDeps(model);
+      const result = await runInbound({
+        deps: { ...deps, answerRequests: true } as never,
+        ctx: { ...ctx(2), addressedToBot: false },
+        input: '有没有人知道哪里有便宜的打印机？',
+      });
+      expect(result.kind).toBe('completed');
+      expect(repos.outbound.create).not.toHaveBeenCalled();
+      expect(repos.traces.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          output: { gate: 'research_route', decision: 'silent', outcome },
+        }),
+      );
+      model.assertComplete();
+    },
+  );
+  it('hands a deliver outcome to the writer even for a non-question supplement', async () => {
+    const model = new ScriptedModel([
+      [functionCall('finish_research', { outcome: 'deliver', note: 'k1 fits' }, { callId: 'fin' })],
+      [
+        functionCall(
+          'reply_to_request',
+          { kind: 'no_match', text: 'E14 附近暂时没有合适的', refs: [] },
+          { callId: 'write' },
+        ),
+      ],
+    ]);
+    const { deps, repos } = makeDeps(model);
+    await runInbound({
+      deps: { ...deps, answerRequests: true } as never,
+      ctx: ctx(0),
+      input: '我住E14',
+    });
+    expect(repos.outbound.create).toHaveBeenCalledOnce();
+    // The writer reads the researcher's note; the researcher's own prompt carries no voice.
+    expect(JSON.stringify(model.calls[1]?.request.input)).toContain('k1 fits');
+    expect(JSON.stringify(model.calls[0]?.request.systemInstructions)).not.toContain('ENFP');
+    model.assertComplete();
+  });
 });

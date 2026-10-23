@@ -27,20 +27,19 @@ export function findSuppliersTool(deps: AgentDeps) {
         scored.map((s, i) => ({ supplierId: s.id, matcherScore: s.score, rank: i + 1 })),
       );
       const byId = new Map(candidates.map((c) => [c.id, c]));
-      return JSON.stringify(
-        scored.map((s) => {
-          const c = byId.get(s.id);
-          return {
-            id: s.id,
-            name: c?.name,
-            price: c?.roughPrice,
-            phone: c?.phone,
-            whatsapp: c?.whatsapp,
-            pool: c?.pool,
-            reasons: s.reasons,
-          };
-        }),
-      );
+      ctx.catalogueSuppliers = scored.map((s) => {
+        const c = byId.get(s.id);
+        return {
+          id: s.id,
+          name: c?.name,
+          price: c?.roughPrice,
+          phone: c?.phone,
+          whatsapp: c?.whatsapp,
+          pool: c?.pool,
+          reasons: s.reasons,
+        };
+      });
+      return JSON.stringify(ctx.catalogueSuppliers);
     },
   });
 }
